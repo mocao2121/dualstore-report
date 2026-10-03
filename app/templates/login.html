@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>登录 · 双店经营报告</title>
+  <style>
+    :root {
+      --bg:#f4f3ef; --surface:#fcfcfb; --ink:#0b0b0b; --ink-2:#52514e;
+      --ink-3:#8a8984; --line:#e4e2db; --jl:#2a78d6; --bad:#c62828;
+      --font:"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;min-height:100vh;display:grid;place-items:center;font-family:var(--font);background:var(--bg);color:var(--ink)}
+    .card{width:min(400px,92vw);background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:28px 26px;box-shadow:0 8px 24px rgba(11,11,11,.05)}
+    h1{margin:0 0 6px;font-size:22px}
+    p{margin:0 0 18px;color:var(--ink-2);font-size:13.5px}
+    label{display:block;font-size:12.5px;color:var(--ink-3);margin:12px 0 6px}
+    input{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font:inherit;background:#fff}
+    button{margin-top:18px;width:100%;padding:11px;border:0;border-radius:10px;background:var(--jl);color:#fff;font:inherit;font-weight:650;cursor:pointer}
+    .err{background:#fdecea;color:var(--bad);padding:8px 10px;border-radius:8px;font-size:13px;margin-bottom:10px}
+    .hint{margin-top:14px;font-size:12px;color:var(--ink-3);line-height:1.5}
+  </style>
+</head>
+<body>
+  <form class="card" method="post" action="/login">
+    <h1>双店经营报告</h1>
+    <p>金力 × 江升 · 本地管理后台</p>
+    {% if error %}<div class="err">{{ error }}</div>{% endif %}
+    <label>用户名</label>
+    <input name="username" autocomplete="username" required autofocus />
+    <label>密码</label>
+    <input name="password" type="password" autocomplete="current-password" required />
+    <button type="submit">登录</button>
+    <div class="hint">默认账号：admin / admin123（管理）· viewer / view123（只读）</div>
+  </form>
+</body>
+</html>

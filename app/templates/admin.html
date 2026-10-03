@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>后台管理 · 双店经营报告</title>
+  <style>
+    :root {
+      --bg:#f4f3ef; --surface:#fcfcfb; --surface-2:#f0efec; --ink:#0b0b0b;
+      --ink-2:#52514e; --ink-3:#8a8984; --line:#e4e2db; --jl:#2a78d6;
+      --js:#eb6834; --good:#0f7b3a; --bad:#c62828; --warn:#b54708;
+      --font:"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:var(--font);background:var(--bg);color:var(--ink)}
+    .wrap{max-width:980px;margin:0 auto;padding:24px 18px 60px}
+    header{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px;flex-wrap:wrap}
+    h1{margin:0;font-size:22px}
+    .nav a,.nav button{margin-left:8px}
+    a.btn,button.btn{
+      appearance:none;border:1px solid var(--line);background:var(--surface);
+      color:var(--ink-2);border-radius:999px;padding:7px 14px;font:inherit;font-size:13px;
+      text-decoration:none;cursor:pointer;display:inline-block
+    }
+    button.btn.primary,a.btn.primary{background:var(--jl);border-color:var(--jl);color:#fff}
+    button.btn.danger{color:var(--bad)}
+    .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:14px}
+    .card h2{margin:0 0 10px;font-size:16px}
+    .msg{background:#e8f5e9;color:var(--good);padding:10px 12px;border-radius:10px;margin-bottom:12px;font-size:13.5px}
+    .err{background:#fdecea;color:var(--bad);padding:10px 12px;border-radius:10px;margin-bottom:12px;font-size:13.5px}
+    label{display:block;font-size:12.5px;color:var(--ink-3);margin:10px 0 6px}
+    input,select{padding:9px 11px;border:1px solid var(--line);border-radius:10px;font:inherit;background:#fff}
+    input[type=file]{padding:8px 0;border:0;background:transparent}
+    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:end}
+    .row > div{flex:1;min-width:140px}
+    table{width:100%;border-collapse:collapse;font-size:13px}
+    th,td{padding:9px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+    th{font-size:12px;color:var(--ink-3)}
+    .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11.5px;background:var(--surface-2)}
+    .pill.ready{background:#e8f5e9;color:var(--good)}
+    .pill.draft{background:#fff4e5;color:var(--warn)}
+    .uploads{color:var(--ink-2);font-size:12.5px;line-height:1.45}
+    .actions{display:flex;gap:6px;flex-wrap:wrap}
+    .hint{font-size:12.5px;color:var(--ink-2);margin-top:8px}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>后台管理</h1>
+      <div style="color:var(--ink-3);font-size:13px;margin-top:4px">{{ user.username }} · 管理员</div>
+    </div>
+    <div class="nav">
+      <a class="btn" href="/report">查看报告</a>
+      <a class="btn" href="/export/html">导出 HTML</a>
+      <form method="post" action="/logout" style="display:inline"><button class="btn" type="submit">退出</button></form>
+    </div>
+  </header>
+
+  {% if message %}<div class="msg">{{ message }}</div>{% endif %}
+  {% if error %}<div class="err">{{ error }}</div>{% endif %}
+
+  <div class="card">
+    <h2>上传当月 Excel</h2>
+    <form method="post" action="/admin/upload" enctype="multipart/form-data">
+      <div class="row">
+        <div>
+          <label>所属月份 (YYYY-MM)</label>
+          <input name="ym" placeholder="2026-10" required pattern="\d{4}-\d{2}" />
+        </div>
+        <div>
+          <label>门店（可自动识别）</label>
+          <select name="store">
+            <option value="auto">自动识别</option>
+            <option value="金力">金力</option>
+            <option value="江升">江升</option>
+          </select>
+        </div>
+        <div style="flex:2">
+          <label>文件（可多选）</label>
+          <input type="file" name="files" accept=".xlsx,.xls" multiple required />
+        </div>
+      </div>
+      <div style="margin-top:14px">
+        <button class="btn primary" type="submit">上传并解析</button>
+      </div>
+      <p class="hint">
+        每月建议上传：金力零售汇总、金力进货、江升零售汇总、江升进货；有自取柜时再加金力自取柜出库表。
+        同月同类型重复上传会覆盖旧数据。
+      </p>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>快捷操作</h2>
+    <div class="actions">
+      <form method="post" action="/admin/months">
+        <input name="ym" placeholder="新建月份 2026-10" required pattern="\d{4}-\d{2}" />
+        <button class="btn" type="submit">新建空月份</button>
+      </form>
+      <form method="post" action="/admin/seed" onsubmit="return confirm('将扫描 金力/ 与 江升/ 文件夹并导入全部 Excel，确认？')">
+        <button class="btn" type="submit">一键导入现有 5–9 月文件夹</button>
+      </form>
+      <form method="post" action="/admin/rebuild">
+        <button class="btn" type="submit">强制重算报告缓存</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>已导入月份</h2>
+    {% if not months %}
+      <p class="hint">还没有数据。请先「一键导入现有文件夹」，或手动上传 Excel。</p>
+    {% else %}
+    <table>
+      <thead>
+        <tr><th>月份</th><th>状态</th><th>已上传文件</th><th>操作</th></tr>
+      </thead>
+      <tbody>
+      {% for m in months %}
+        <tr>
+          <td><strong>{{ m.ym }}</strong><div style="color:var(--ink-3);font-size:12px">{{ m.updated_at or '' }}</div></td>
+          <td><span class="pill {{ m.status }}">{{ m.status }}</span></td>
+          <td class="uploads">
+            {% if m.uploads %}
+              {% for u in m.uploads %}
+                <div>{{ u.store }} · {{ u.kind }} · {{ u.filename }}</div>
+              {% endfor %}
+            {% else %}
+              —
+            {% endif %}
+          </td>
+          <td>
+            <div class="actions">
+              <form method="post" action="/admin/months/{{ m.ym }}/rebuild">
+                <button class="btn" type="submit">重算</button>
+              </form>
+              <form method="post" action="/admin/months/{{ m.ym }}/delete" onsubmit="return confirm('确认删除 {{ m.ym }} 的全部数据？')">
+                <button class="btn danger" type="submit">删除</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+  </div>
+</div>
+</body>
+</html>

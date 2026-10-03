@@ -1,0 +1,22 @@
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.env
+.env.*
+!.env.example
+
+app/data/app.db
+app/data/session_secret.txt
+app/data/uploads/
+
+# 本地原始导出表体积大，云端用 seed_data.json
+金力/
+江升/
+*.xlsx
+!app/data/seed_data.json
+
+# 旧静态报告可保留在本地，不必进仓库（可选）
+# 金力_江升_双店月度对比报告_2026年5-9月.html
