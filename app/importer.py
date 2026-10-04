@@ -38,10 +38,12 @@ def clear_month_kind(ym: str, store: str, kind: str) -> None:
         elif kind == "purchase":
             conn.execute("DELETE FROM purchase_lines WHERE ym=? AND store=?", (ym, store))
         elif kind == "cabinet":
-            conn.execute("DELETE FROM cabinet_lines WHERE ym=?", (ym,))
+            conn.execute(
+                "DELETE FROM cabinet_lines WHERE ym=? AND store=?", (ym, store)
+            )
         conn.execute(
             "DELETE FROM uploads WHERE ym=? AND store=? AND kind=?",
-            (ym, store if kind != "cabinet" else "金力", kind),
+            (ym, store, kind),
         )
 
 
@@ -97,12 +99,13 @@ def insert_lines(ym: str, store: str, kind: str, rows: list[dict]) -> int:
             conn.executemany(
                 """
                 INSERT INTO cabinet_lines
-                (ym, name, category, qty, retail_amt, cost_amt, point, is_transfer, date)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (ym, store, name, category, qty, retail_amt, cost_amt, point, is_transfer, date)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 [
                     (
                         ym,
+                        store,
                         r.get("name"),
                         r.get("category"),
                         r.get("qty", 0),
@@ -137,7 +140,7 @@ def import_file(
     # 先粗读用于门店识别
     peek = pd.read_excel(path, sheet_name=xl.sheet_names[0], header=0, nrows=30)
     store = store or detect_store(str(path), peek)
-    if kind == "cabinet":
+    if kind == "cabinet" and not store:
         store = "金力"
     if not store:
         raise ValueError(f"无法识别门店: {path.name}")
@@ -148,6 +151,9 @@ def import_file(
         rows = parse_purchase(path)
     else:
         rows = parse_cabinet(path)
+        if store == "江升":
+            for r in rows:
+                r["is_transfer"] = 0
 
     warnings: list[str] = []
     affected: list[str] = []
@@ -159,49 +165,41 @@ def import_file(
         shutil.copy2(path, dest)
 
     if kind == "cabinet":
-        # 按出库日期拆月（9月文件常含上月末出库）
-        buckets: dict[str, list[dict]] = {}
+        # 业务按「上传所选月份」整月覆盖，不再按出库日期拆月
+        # （汇总周期常是上月下旬到本月下旬，文件内日期会跨月）
+        date_yms = sorted({r.get("ym") for r in rows if r.get("ym")})
         for r in rows:
-            row_ym = r.get("ym") or ym
-            buckets.setdefault(row_ym, []).append(r)
+            r["ym"] = ym
+        ensure_month(ym)
         if replace:
-            # 只整月覆盖「上传所选月份」，避免把其它月柜数据清掉
             clear_month_kind(ym, store, kind)
-        n = 0
-        for row_ym, chunk in sorted(buckets.items()):
-            ensure_month(row_ym)
-            if row_ym != ym:
-                dates = [r.get("date") for r in chunk if r.get("date")]
-                _delete_cabinet_dates(row_ym, dates)
-            n += insert_lines(row_ym, store, kind, chunk)
-            affected.append(f"{row_ym}:{len(chunk)}")
-            _refresh_month_status(row_ym)
-            with connect() as conn:
-                conn.execute(
-                    """
-                    INSERT INTO uploads (ym, store, kind, filename, path, uploaded_by, uploaded_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        row_ym,
-                        store,
-                        kind,
-                        path.name,
-                        str(dest),
-                        uploaded_by,
-                        datetime.now().isoformat(timespec="seconds"),
-                    ),
-                )
-        unknown = {
-            r["point"]
-            for r in rows
-            if r["point"] not in {"金力食堂", "金力宿舍", "智能柜", "江升"}
-        }
+        n = insert_lines(ym, store, kind, rows)
+        with connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO uploads (ym, store, kind, filename, path, uploaded_by, uploaded_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    ym,
+                    store,
+                    kind,
+                    path.name,
+                    str(dest),
+                    uploaded_by,
+                    datetime.now().isoformat(timespec="seconds"),
+                ),
+            )
+        known_points = {"金力食堂", "金力宿舍", "智能柜", "江升", "江升食堂"}
+        unknown = {r["point"] for r in rows if r["point"] not in known_points}
         if unknown:
             warnings.append(f"未知柜点: {', '.join(sorted(unknown))}")
-        if len(buckets) > 1:
-            warnings.append("已按出库日期拆到多个月份: " + ", ".join(affected))
-        status = "ready"
+        if date_yms and (len(date_yms) > 1 or date_yms != [ym]):
+            warnings.append(
+                f"文件内出库日期含 {', '.join(date_yms)}，已全部计入所选月份 {ym}"
+            )
+        affected.append(f"{ym}:{n}")
+        status = _refresh_month_status(ym)
     else:
         ensure_month(ym)
         if replace:
@@ -238,15 +236,15 @@ def import_file(
     }
 
 
-def _delete_cabinet_dates(ym: str, dates: list[str]) -> None:
+def _delete_cabinet_dates(ym: str, store: str, dates: list[str]) -> None:
     dates = [d for d in dates if d]
     if not dates:
         return
     with connect() as conn:
         qmarks = ",".join("?" for _ in dates)
         conn.execute(
-            f"DELETE FROM cabinet_lines WHERE ym=? AND date IN ({qmarks})",
-            [ym, *dates],
+            f"DELETE FROM cabinet_lines WHERE ym=? AND store=? AND date IN ({qmarks})",
+            [ym, store, *dates],
         )
 
 

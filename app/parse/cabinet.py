@@ -8,6 +8,7 @@ from .detect import to_float
 
 
 CABINET_POINTS = {"金力食堂", "金力宿舍", "智能柜"}
+JS_CABINET_POINTS = {"江升食堂"}
 
 
 def _drop_empty_names(df: pd.DataFrame) -> pd.DataFrame:
@@ -21,7 +22,9 @@ def _drop_empty_names(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def parse_cabinet(path: str | Path) -> list[dict]:
-    """读取自取柜出库：遍历全部 sheet；按行日期归月；江升=调拨。"""
+    """读取自取柜/售卖机出库：遍历全部 sheet；保留行日期；金力文件 point=江升 记为调拨。
+    归入哪个月由上传时选择的月份决定，不在此按日期拆月。
+    """
     path = Path(path)
     xl = pd.ExcelFile(path)
     rows: list[dict] = []
@@ -30,7 +33,9 @@ def parse_cabinet(path: str | Path) -> list[dict]:
         df = _drop_empty_names(df)
         if df.empty:
             continue
-        sheet_point = sheet.strip() if sheet.strip() in CABINET_POINTS else ""
+        sheet_point = ""
+        if sheet.strip() in CABINET_POINTS or sheet.strip() in JS_CABINET_POINTS:
+            sheet_point = sheet.strip()
         for _, r in df.iterrows():
             name = str(r.get("商品名称") or "").strip()
             if not name:

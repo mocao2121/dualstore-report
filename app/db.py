@@ -76,6 +76,7 @@ CREATE TABLE IF NOT EXISTS purchase_lines (
 CREATE TABLE IF NOT EXISTS cabinet_lines (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   ym TEXT NOT NULL,
+  store TEXT NOT NULL DEFAULT '金力',
   name TEXT,
   category TEXT,
   qty REAL DEFAULT 0,
@@ -154,6 +155,7 @@ CREATE TABLE IF NOT EXISTS purchase_lines (
 CREATE TABLE IF NOT EXISTS cabinet_lines (
   id SERIAL PRIMARY KEY,
   ym TEXT NOT NULL,
+  store TEXT NOT NULL DEFAULT '金力',
   name TEXT,
   category TEXT,
   qty DOUBLE PRECISION DEFAULT 0,
@@ -336,7 +338,30 @@ def init_db() -> None:
     schema = SCHEMA_POSTGRES if using_postgres() else SCHEMA_SQLITE
     with connect() as conn:
         conn.executescript(schema)
+    migrate_db()
     load_seed_if_empty()
+
+
+def migrate_db() -> None:
+    """幂等迁移：为已有库补齐 cabinet_lines.store。"""
+    with connect() as conn:
+        if using_postgres():
+            conn.execute(
+                "ALTER TABLE cabinet_lines ADD COLUMN IF NOT EXISTS store TEXT NOT NULL DEFAULT '金力'"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_cabinet_ym_store ON cabinet_lines(ym, store)"
+            )
+            return
+
+        cols = [r["name"] for r in conn.execute("PRAGMA table_info(cabinet_lines)").fetchall()]
+        if "store" not in cols:
+            conn.execute(
+                "ALTER TABLE cabinet_lines ADD COLUMN store TEXT NOT NULL DEFAULT '金力'"
+            )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_cabinet_ym_store ON cabinet_lines(ym, store)"
+        )
 
 
 def _table_count(conn, table: str) -> int:
@@ -409,11 +434,12 @@ def load_seed_if_empty() -> bool:
             conn.execute(
                 """
                 INSERT INTO cabinet_lines
-                (ym, name, category, qty, retail_amt, cost_amt, point, is_transfer, date)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (ym, store, name, category, qty, retail_amt, cost_amt, point, is_transfer, date)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     row["ym"],
+                    row.get("store") or "金力",
                     row.get("name"),
                     row.get("category"),
                     row.get("qty") or 0,

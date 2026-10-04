@@ -10,7 +10,7 @@
     color-scheme: light;
     --bg: #f4f3ef; --surface: #fcfcfb; --surface-2: #f0efec;
     --ink: #0b0b0b; --ink-2: #52514e; --ink-3: #8a8984; --line: #e4e2db;
-    --jl: #2a78d6; --js: #eb6834; --cab: #1baf7a; --xfer: #4a3aa7;
+    --jl: #2a78d6; --js: #eb6834; --cab: #1baf7a; --js-cab: #f0a070; --xfer: #4a3aa7;
     --good: #0f7b3a; --warn: #b54708; --bad: #c62828;
     --radius: 14px;
     --shadow: 0 1px 2px rgba(11,11,11,.04), 0 8px 24px rgba(11,11,11,.04);
@@ -21,7 +21,7 @@
       color-scheme: dark;
       --bg: #111110; --surface: #1a1a19; --surface-2: #242422;
       --ink: #f5f4ef; --ink-2: #c3c2b7; --ink-3: #8a8984; --line: #2e2e2b;
-      --jl: #3987e5; --js: #d95926; --cab: #199e70; --xfer: #9085e9;
+      --jl: #3987e5; --js: #d95926; --cab: #199e70; --js-cab: #e8a07a; --xfer: #9085e9;
       --good: #3dd68c; --warn: #f5a524; --bad: #e66767;
       --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25);
     }
@@ -49,7 +49,8 @@
   }
   .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
   .dot.jl { background: var(--jl); } .dot.js { background: var(--js); }
-  .dot.cab { background: var(--cab); } .dot.xfer { background: var(--xfer); }
+  .dot.cab { background: var(--cab); } .dot.js-cab { background: var(--js-cab); }
+  .dot.xfer { background: var(--xfer); }
 
   nav.toc {
     display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 22px;
@@ -151,6 +152,9 @@
   .month-tabs button.active {
     background: var(--jl); border-color: var(--jl); color: #fff; font-weight: 650;
   }
+  .month-tabs.cat-tabs button.active {
+    background: var(--js); border-color: var(--js);
+  }
   .top-table { font-size: 12.5px; }
   .top-table td.rank { color: var(--ink-3); width: 28px; text-align: center; font-weight: 700; }
   .top-table td.name { text-align: left; max-width: 220px; }
@@ -188,11 +192,12 @@
   <header class="hero">
     <div class="eyebrow">SUPERMARKET DUAL-STORE ANALYTICS · V2</div>
     <h1>金力 × 江升 · 双店经营月度对比报告</h1>
-    <p class="sub">覆盖 {{ period_label }} 门店零售与进货，并纳入金力自取柜（智能柜 / 宿舍 / 食堂）渠道对照；单品对比支持按月切换 Top10。</p>
+    <p class="sub">覆盖 {{ period_label }} 门店零售与进货，并纳入金力自取柜（智能柜 / 宿舍 / 食堂）与江升售卖机渠道对照；单品对比支持按月切换 Top10 / 滞销 Bottom5。</p>
     <div class="meta">
       <span class="chip"><span class="dot jl"></span>金力门店</span>
       <span class="chip"><span class="dot cab"></span>金力自取柜</span>
       <span class="chip"><span class="dot js"></span>江升小店</span>
+      <span class="chip"><span class="dot js-cab"></span>江升售卖机</span>
       <span class="chip">周期：{{ period_label }}</span>
       <span class="chip">生成：{{ generated_at }}</span>
     </div>
@@ -201,11 +206,12 @@
   <nav class="toc">
     <a href="#overview">总览</a>
     <a href="#monthly">月度对比</a>
-    <a href="#cabinet">自取柜</a>
+    <a href="#cabinet">柜/机渠道</a>
     <a href="#profit">毛利</a>
     <a href="#purchase">进货</a>
     <a href="#category">品类</a>
     <a href="#products">单品Top10</a>
+    <a href="#slow-movers">滞销Bottom5</a>
     <a href="#supplier">供应商</a>
     <a href="#table">明细表</a>
     <a href="#insights">结论</a>
@@ -220,7 +226,7 @@
       <div class="kpi">
         <div class="label">含柜总零售额</div>
         <div class="value" id="kpi-retail">—</div>
-        <div class="hint">门店 <b id="kpi-store">—</b> · 自取柜 <b id="kpi-cab">—</b></div>
+        <div class="hint">门店 <b id="kpi-store">—</b> · 柜/机 <b id="kpi-cab">—</b></div>
       </div>
       <div class="kpi">
         <div class="label">含柜总毛利</div>
@@ -235,7 +241,7 @@
       <div class="kpi">
         <div class="label">含柜总销量（件）</div>
         <div class="value" id="kpi-qty">—</div>
-        <div class="hint">柜贡献件数 <b id="kpi-cab-q">—</b></div>
+        <div class="hint">柜贡献件数 <b id="kpi-cab-q">—</b> · 含江升售卖机</div>
       </div>
     </div>
 
@@ -315,45 +321,57 @@
 
   <section class="block" id="cabinet">
     <div class="sec-title">
-      <h2>三、金力自取柜专项</h2>
-      <p>智能柜 · 金力宿舍 · 金力食堂</p>
+      <h2>三、自取柜 / 售卖机专项</h2>
+      <p>金力三台柜点 · 江升售卖机</p>
     </div>
     <div class="grid-2">
       <div class="card">
-        <h2>自取柜分点月度出库额</h2>
+        <h2>金力自取柜分点月度出库额</h2>
         <p class="desc">堆叠柱 · 三台柜点贡献。</p>
         <div class="chart-box"><canvas id="chartCabStack"></canvas></div>
       </div>
       <div class="card">
-        <h2>自取柜 vs 金力门店（8–9 月）</h2>
-        <p class="desc">同月对照 · 柜渠道约占金力含柜 1 成。</p>
+        <h2>柜/机 vs 门店对照</h2>
+        <p class="desc">有柜/机数据的月份自动展示。</p>
         <div class="chart-box"><canvas id="chartCabVsStore"></canvas></div>
       </div>
     </div>
     <div class="grid-2b">
+      <div class="card">
+        <h2>江升售卖机分点月度出库额</h2>
+        <p class="desc">上传江升售卖机出库表后自动出现点位。</p>
+        <div class="chart-box"><canvas id="chartJsCabStack"></canvas></div>
+      </div>
+      <div class="card">
+        <h2>江升售卖机分月 Top10</h2>
+        <p class="desc">有出库数据的月份自动展示。</p>
+        <div id="jsCabTopGrid" class="grid-2b" style="margin:0"></div>
+      </div>
+    </div>
+    <div class="grid-2b">
       <div class="card" id="cabTopCards" style="grid-column:1/-1">
-        <h2>自取柜分月 Top10</h2>
+        <h2>金力自取柜分月 Top10</h2>
         <p class="desc">有出库数据的月份自动展示。</p>
         <div id="cabTopGrid" class="grid-2b" style="margin:0"></div>
       </div>
     </div>
-    <div class="note">口径：自取柜取「出库零售金额」（智能柜/宿舍/食堂）。9 月导出中标注「江升」的出库视为<strong>金力→江升调拨</strong>，已剔除出柜渠道、不计入零售，仅在明细表「调拨江升」列展示。自取柜与门店 POS 零售为不同通道，报告中并列展示，避免简单相加误解。</div>
+    <div class="note">口径：柜/机取出库零售金额；归属月份以<strong>后台上传所选月份</strong>为准（文件内出库日期跨月也会整月计入）。金力文件中单头备注「江升」视为<strong>金力→江升调拨</strong>，不计入柜零售，仅在明细表「调拨江升」列展示。江升售卖机为江升自有渠道，与调拨无关。柜/机与门店 POS 为不同通道，报告中并列展示。</div>
   </section>
 
   <section class="block" id="profit">
     <div class="sec-title">
       <h2>四、毛利与盈利能力</h2>
-      <p>门店 + 自取柜毛利</p>
+      <p>门店 + 自取柜 / 售卖机毛利</p>
     </div>
     <div class="grid-2">
       <div class="card">
         <h2>月度毛利额</h2>
-        <p class="desc">三通道毛利贡献。</p>
+        <p class="desc">多通道毛利贡献。</p>
         <div class="chart-box"><canvas id="chartProfit"></canvas></div>
       </div>
       <div class="card">
         <h2>月度毛利率</h2>
-        <p class="desc">自取柜毛利率显著高于门店（约 30%）。</p>
+        <p class="desc">柜/机毛利率通常高于门店。</p>
         <div class="chart-box"><canvas id="chartMargin"></canvas></div>
       </div>
     </div>
@@ -440,9 +458,41 @@
     </div>
   </section>
 
+  <section class="block" id="slow-movers">
+    <div class="sec-title">
+      <h2>八、品类滞销 · 每月 Bottom5</h2>
+      <p>按当月销量（件数）升序 · 每品类 Bottom5 · 门店零售口径</p>
+    </div>
+    <div class="month-tabs" id="bottomMonthTabs"></div>
+    <div class="month-tabs cat-tabs" id="bottomCatTabs"></div>
+    <div class="grid-2b">
+      <div class="card">
+        <h2><span class="dot jl"></span> 金力 · <span id="jlBottomLabel">—</span></h2>
+        <p class="desc">件数越少越靠前</p>
+        <div class="chart-box tall"><canvas id="chartBottomJL"></canvas></div>
+      </div>
+      <div class="card">
+        <h2><span class="dot js"></span> 江升 · <span id="jsBottomLabel">—</span></h2>
+        <p class="desc">件数越少越靠前</p>
+        <div class="chart-box tall"><canvas id="chartBottomJS"></canvas></div>
+      </div>
+    </div>
+    <div class="grid-2b">
+      <div class="card" style="overflow-x:auto">
+        <h2>金力滞销明细</h2>
+        <table class="data top-table" id="tblBottomJL"><thead><tr><th>#</th><th>商品</th><th>件数</th><th>零售额</th><th>毛利</th></tr></thead><tbody></tbody></table>
+      </div>
+      <div class="card" style="overflow-x:auto">
+        <h2>江升滞销明细</h2>
+        <table class="data top-table" id="tblBottomJS"><thead><tr><th>#</th><th>商品</th><th>件数</th><th>零售额</th><th>毛利</th></tr></thead><tbody></tbody></table>
+      </div>
+    </div>
+    <div class="note">口径：仅门店 POS 零售；同品名同月合计件数升序取 5。品类取主品类（饮料/香烟/副食/槟榔/冰淇淋/乳饮/方便面/百货）。</div>
+  </section>
+
   <section class="block" id="supplier">
     <div class="sec-title">
-      <h2>八、供应商进货结构</h2>
+      <h2>九、供应商进货结构</h2>
       <p>5 个月累计</p>
     </div>
     <div class="grid-2b">
@@ -459,8 +509,8 @@
 
   <section class="block" id="table">
     <div class="sec-title">
-      <h2>九、月度汇总明细表</h2>
-      <p>含自取柜与调拨列</p>
+      <h2>十、月度汇总明细表</h2>
+      <p>含自取柜 / 售卖机与调拨列</p>
     </div>
     <div class="card" style="overflow-x:auto">
       <table class="data" id="mainTable">
@@ -470,15 +520,19 @@
             <th>金力门店</th>
             <th>自取柜</th>
             <th>金力含柜</th>
-            <th>江升</th>
+            <th>江升门店</th>
+            <th>江升售卖机</th>
+            <th>江升含柜</th>
             <th>含柜总合计</th>
             <th>金力含柜占比</th>
             <th>金力门店毛利</th>
             <th>柜毛利</th>
             <th>江升毛利</th>
+            <th>机毛利</th>
             <th>金力门店毛利率</th>
             <th>柜毛利率</th>
             <th>江升毛利率</th>
+            <th>机毛利率</th>
             <th>调拨江升</th>
             <th>金力进货</th>
             <th>江升进货</th>
@@ -492,23 +546,23 @@
 
   <section class="block" id="insights">
     <div class="sec-title">
-      <h2>十、核心结论与建议</h2>
+      <h2>十一、核心结论与建议</h2>
       <p>含自取柜洞察</p>
     </div>
     <div class="insights" id="insightList"></div>
   </section>
 
   <footer>
-    <div>数据来源：金力/江升「商品零售汇总」「历史进货查询」；金力「自取柜出库数量3台」（8–9 月，含智能柜/宿舍/食堂）。</div>
-    <div>口径：门店零售取 POS 汇总；自取柜取出库零售金额；单头备注含「江升」记为调拨不计入柜零售。品类/单品 Top 基于门店零售。</div>
-    <div style="margin-top:6px">报告自动生成 · 2026-10-02 · V2</div>
+    <div>数据来源：金力/江升「商品零售汇总」「历史进货查询」；金力「自取柜出库」；江升「售卖机出库」（有数据月份）。</div>
+    <div>口径：门店零售取 POS 汇总；柜/机取出库零售金额；金力文件单头备注「江升」记为调拨不计入柜零售。品类/单品 Top 与滞销 Bottom5 基于门店零售。</div>
+    <div style="margin-top:6px">报告自动生成 · {{ generated_at }} · V2</div>
   </footer>
 </div>
 
 <script>
 const P = {{ P_json | safe }};
 
-const JL = '#2a78d6', JS = '#eb6834', CAB = '#1baf7a', XFER = '#4a3aa7';
+const JL = '#2a78d6', JS = '#eb6834', CAB = '#1baf7a', JS_CAB = '#f0a070', XFER = '#4a3aa7';
 const CAT_COLORS = ['#2a78d6','#eb6834','#1baf7a','#eda100','#e87ba4','#4a3aa7','#008300','#e34948','#8a8984'];
 const ink = getComputedStyle(document.documentElement).getPropertyValue('--ink-2').trim() || '#52514e';
 const ink3 = getComputedStyle(document.documentElement).getPropertyValue('--ink-3').trim() || '#8a8984';
@@ -530,16 +584,18 @@ const tJL = P.totals['金力'] || {};
 const tJS = P.totals['江升'] || {};
 const tCab = P.totals['金力自取柜'] || {};
 const tJLall = P.totals['金力含柜'] || {};
+const tJsCab = P.totals['江升售卖机'] || {};
+const tJSall = P.totals['江升含柜'] || {};
 
 document.getElementById('kpi-retail').textContent = yuan(g['含柜总零售']);
 document.getElementById('kpi-store').textContent = yuan(g['门店零售金额']);
-document.getElementById('kpi-cab').textContent = yuan(g['自取柜零售金额']);
+document.getElementById('kpi-cab').textContent = yuan((g['自取柜零售金额'] || 0) + (g['江升售卖机零售金额'] || 0));
 document.getElementById('kpi-profit').textContent = yuan(g['含柜总毛利']);
 document.getElementById('kpi-margin').textContent = pct(g['含柜总毛利']/g['含柜总零售']*100);
 document.getElementById('kpi-purchase').textContent = yuan(g['进货金额']);
 document.getElementById('kpi-cab-m').textContent = pct(tCab['毛利率']);
-document.getElementById('kpi-qty').textContent = num(g['门店零售数量'] + g['自取柜数量']);
-document.getElementById('kpi-cab-q').textContent = num(g['自取柜数量']);
+document.getElementById('kpi-qty').textContent = num((g['门店零售数量'] || 0) + (g['自取柜数量'] || 0) + (g['江升售卖机数量'] || 0));
+document.getElementById('kpi-cab-q').textContent = num((g['自取柜数量'] || 0) + (g['江升售卖机数量'] || 0));
 
 document.getElementById('jl-retail').textContent = yuan(tJL['零售金额']);
 document.getElementById('jl-profit').textContent = yuan(tJL['毛利']) + ' / ' + pct(tJL['毛利率']);
@@ -579,7 +635,8 @@ new Chart(document.getElementById('chartRetailBar'), {
     datasets: [
       { label: '金力门店', data: P.data.retail_amt['金力门店'], backgroundColor: JL, borderRadius: {topLeft:4,topRight:4}, borderSkipped:false, barPercentage:0.75, categoryPercentage:0.7 },
       { label: '金力自取柜', data: P.data.retail_amt['金力自取柜'], backgroundColor: CAB, borderRadius: {topLeft:4,topRight:4}, borderSkipped:false, barPercentage:0.75, categoryPercentage:0.7 },
-      { label: '江升', data: P.data.retail_amt['江升'], backgroundColor: JS, borderRadius: {topLeft:4,topRight:4}, borderSkipped:false, barPercentage:0.75, categoryPercentage:0.7 }
+      { label: '江升门店', data: P.data.retail_amt['江升'], backgroundColor: JS, borderRadius: {topLeft:4,topRight:4}, borderSkipped:false, barPercentage:0.75, categoryPercentage:0.7 },
+      { label: '江升售卖机', data: P.data.retail_amt['江升售卖机'] || [], backgroundColor: JS_CAB, borderRadius: {topLeft:4,topRight:4}, borderSkipped:false, barPercentage:0.75, categoryPercentage:0.7 }
     ]
   },
   options: {
@@ -672,7 +729,8 @@ new Chart(document.getElementById('chartQty'), {
     datasets: [
       { label: '金力门店', data: P.data.retail_qty['金力门店'], backgroundColor: JL, borderRadius: 4, borderSkipped: false, barPercentage: 0.75, categoryPercentage: 0.7 },
       { label: '金力自取柜', data: P.data.retail_qty['金力自取柜'], backgroundColor: CAB, borderRadius: 4, borderSkipped: false, barPercentage: 0.75, categoryPercentage: 0.7 },
-      { label: '江升', data: P.data.retail_qty['江升'], backgroundColor: JS, borderRadius: 4, borderSkipped: false, barPercentage: 0.75, categoryPercentage: 0.7 }
+      { label: '江升门店', data: P.data.retail_qty['江升'], backgroundColor: JS, borderRadius: 4, borderSkipped: false, barPercentage: 0.75, categoryPercentage: 0.7 },
+      { label: '江升售卖机', data: P.data.retail_qty['江升售卖机'] || [], backgroundColor: JS_CAB, borderRadius: 4, borderSkipped: false, barPercentage: 0.75, categoryPercentage: 0.7 }
     ]
   },
   options: {
@@ -708,7 +766,7 @@ new Chart(document.getElementById('chartCabStack'), {
   }
 });
 
-const cabVs = (P.combined || []).filter(c => c['金力自取柜零售'] > 0);
+const cabVs = (P.combined || []).filter(c => (c['金力自取柜零售'] > 0) || (c['江升售卖机零售'] > 0));
 new Chart(document.getElementById('chartCabVsStore'), {
   type: 'bar',
   data: {
@@ -716,7 +774,8 @@ new Chart(document.getElementById('chartCabVsStore'), {
     datasets: [
       { label: '金力门店', data: cabVs.map(c => c['金力门店零售']), backgroundColor: JL, borderRadius: 4, borderSkipped: false, barPercentage: 0.7, categoryPercentage: 0.65 },
       { label: '金力自取柜', data: cabVs.map(c => c['金力自取柜零售']), backgroundColor: CAB, borderRadius: 4, borderSkipped: false, barPercentage: 0.7, categoryPercentage: 0.65 },
-      { label: '江升', data: cabVs.map(c => c['江升零售']), backgroundColor: JS, borderRadius: 4, borderSkipped: false, barPercentage: 0.7, categoryPercentage: 0.65 }
+      { label: '江升门店', data: cabVs.map(c => c['江升零售']), backgroundColor: JS, borderRadius: 4, borderSkipped: false, barPercentage: 0.7, categoryPercentage: 0.65 },
+      { label: '江升售卖机', data: cabVs.map(c => c['江升售卖机零售'] || 0), backgroundColor: JS_CAB, borderRadius: 4, borderSkipped: false, barPercentage: 0.7, categoryPercentage: 0.65 }
     ]
   },
   options: {
@@ -726,9 +785,13 @@ new Chart(document.getElementById('chartCabVsStore'), {
   }
 });
 
-function hbarFrom(id, names, amts, color) {
+function hbarFrom(id, names, amts, color, kind) {
+  kind = kind || 'yuan';
   const rn = names.slice().reverse();
   const ra = amts.slice().reverse();
+  const fmt = (v) => kind === 'qty'
+    ? ('件数 ' + Number(v).toLocaleString('zh-CN', {maximumFractionDigits: 1}))
+    : yuanFull(v);
   return new Chart(document.getElementById(id), {
     type: 'bar',
     data: {
@@ -742,12 +805,20 @@ function hbarFrom(id, names, amts, color) {
         tooltip: {
           callbacks: {
             title: (items) => rn[items[0].dataIndex],
-            label: (ctx) => yuanFull(ctx.parsed.x)
+            label: (ctx) => fmt(ctx.parsed.x)
           }
         }
       },
       scales: {
-        x: { grid: { color: grid }, border: { display: false }, ticks: { callback: (v) => v >= 10000 ? (v/10000)+'万' : v } },
+        x: {
+          grid: { color: grid },
+          border: { display: false },
+          ticks: {
+            callback: (v) => kind === 'qty'
+              ? Number(v).toLocaleString('zh-CN', {maximumFractionDigits: 0})
+              : (v >= 10000 ? (v/10000)+'万' : v)
+          }
+        },
         y: { grid: { display: false }, ticks: { font: { size: 11 } } }
       }
     }
@@ -771,6 +842,55 @@ function hbarFrom(id, names, amts, color) {
     hbarFrom(id, data.names, data.amt, CAB);
   });
 })();
+(function(){
+  const canvas = document.getElementById('chartJsCabStack');
+  if (!canvas) return;
+  const pts = Object.keys(P.js_cab_point_month || {});
+  if (!pts.length) {
+    canvas.parentElement.innerHTML = '<div class="note">暂无江升售卖机分点数据 · 后台上传后自动展示</div>';
+    return;
+  }
+  new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels: P.months,
+      datasets: pts.map((k, i) => ({
+        label: k,
+        data: P.js_cab_point_month[k],
+        backgroundColor: CAT_COLORS[i % CAT_COLORS.length],
+        borderRadius: {topLeft:3, topRight:3},
+        borderSkipped: false,
+        barPercentage: 0.65, categoryPercentage: 0.7
+      }))
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'top', align: 'end' }, tooltip: { callbacks: { label: tipYuan } } },
+      scales: {
+        x: { stacked: true, grid: { display: false } },
+        y: Object.assign({ stacked: true }, yWan)
+      }
+    }
+  });
+})();
+(function(){
+  const grid = document.getElementById('jsCabTopGrid');
+  if (!grid) return;
+  const entries = Object.entries(P.js_cab_monthly_top || {});
+  if (!entries.length) {
+    grid.innerHTML = '<div class="note">暂无江升售卖机分月 Top10</div>';
+    return;
+  }
+  entries.forEach(([lab, data], i) => {
+    const id = 'chartJsCabTopDyn' + i;
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.style.marginBottom = '0';
+    card.innerHTML = `<h2>售卖机 ${lab} Top10</h2><div class="chart-box tall"><canvas id="${id}"></canvas></div>`;
+    grid.appendChild(card);
+    hbarFrom(id, data.names, data.amt, JS_CAB);
+  });
+})();
 
 new Chart(document.getElementById('chartProfit'), {
   type: 'bar',
@@ -779,7 +899,8 @@ new Chart(document.getElementById('chartProfit'), {
     datasets: [
       { label: '金力门店毛利', data: P.data.gross_profit['金力门店'], backgroundColor: JL, borderRadius: 4, borderSkipped: false, barPercentage: 0.75, categoryPercentage: 0.7 },
       { label: '自取柜毛利', data: P.data.gross_profit['金力自取柜'], backgroundColor: CAB, borderRadius: 4, borderSkipped: false, barPercentage: 0.75, categoryPercentage: 0.7 },
-      { label: '江升毛利', data: P.data.gross_profit['江升'], backgroundColor: JS, borderRadius: 4, borderSkipped: false, barPercentage: 0.75, categoryPercentage: 0.7 }
+      { label: '江升门店毛利', data: P.data.gross_profit['江升'], backgroundColor: JS, borderRadius: 4, borderSkipped: false, barPercentage: 0.75, categoryPercentage: 0.7 },
+      { label: '江升售卖机毛利', data: P.data.gross_profit['江升售卖机'] || [], backgroundColor: JS_CAB, borderRadius: 4, borderSkipped: false, barPercentage: 0.75, categoryPercentage: 0.7 }
     ]
   },
   options: {
@@ -796,7 +917,8 @@ new Chart(document.getElementById('chartMargin'), {
     datasets: [
       { label: '金力门店', data: P.data.gross_margin['金力门店'], borderColor: JL, backgroundColor: JL, tension: 0.35, pointRadius: 5, borderWidth: 2.5 },
       { label: '自取柜', data: P.data.gross_margin['金力自取柜'], borderColor: CAB, backgroundColor: CAB, tension: 0.35, pointRadius: 5, borderWidth: 2.5, spanGaps: true },
-      { label: '江升', data: P.data.gross_margin['江升'], borderColor: JS, backgroundColor: JS, tension: 0.35, pointRadius: 5, borderWidth: 2.5 }
+      { label: '江升门店', data: P.data.gross_margin['江升'], borderColor: JS, backgroundColor: JS, tension: 0.35, pointRadius: 5, borderWidth: 2.5 },
+      { label: '江升售卖机', data: P.data.gross_margin['江升售卖机'] || [], borderColor: JS_CAB, backgroundColor: JS_CAB, tension: 0.35, pointRadius: 5, borderWidth: 2.5, spanGaps: true, borderDash: [5,4] }
     ]
   },
   options: {
@@ -942,6 +1064,69 @@ P.months.forEach(m => {
 });
 renderMonthTop(currentMonth);
 
+// ---- Monthly Bottom5 by category ----
+let chartBottomJL = null, chartBottomJS = null;
+let currentBottomMonth = (P.months && P.months.length) ? P.months[P.months.length - 1] : '9月';
+let currentBottomCat = (P.main_cats && P.main_cats[0]) || '饮料';
+const emptyBottom = { names: [], amt: [], qty: [], profit: [] };
+
+function renderBottom() {
+  const m = currentBottomMonth;
+  const cat = currentBottomCat;
+  document.getElementById('jlBottomLabel').textContent = m + ' · ' + cat;
+  document.getElementById('jsBottomLabel').textContent = m + ' · ' + cat;
+  document.querySelectorAll('#bottomMonthTabs button').forEach(b => {
+    b.classList.toggle('active', b.dataset.m === m);
+  });
+  document.querySelectorAll('#bottomCatTabs button').forEach(b => {
+    b.classList.toggle('active', b.dataset.cat === cat);
+  });
+
+  const jl = (((P.monthly_bottom || {})['金力'] || {})[m] || {})[cat] || emptyBottom;
+  const js = (((P.monthly_bottom || {})['江升'] || {})[m] || {})[cat] || emptyBottom;
+
+  if (chartBottomJL) chartBottomJL.destroy();
+  if (chartBottomJS) chartBottomJS.destroy();
+  chartBottomJL = hbarFrom('chartBottomJL', jl.names, jl.qty, JL, 'qty');
+  chartBottomJS = hbarFrom('chartBottomJS', js.names, js.qty, JS, 'qty');
+
+  function fillBottomTbl(id, data) {
+    const tb = document.querySelector('#' + id + ' tbody');
+    tb.innerHTML = '';
+    if (!data.names.length) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = '<td colspan="5" style="color:var(--ink-3)">该品类当月无零售明细</td>';
+      tb.appendChild(tr);
+      return;
+    }
+    data.names.forEach((n, i) => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td class="rank">${i+1}</td><td class="name">${n}</td><td>${num(data.qty[i])}</td><td>${yuanFull(data.amt[i])}</td><td>${yuanFull(data.profit[i])}</td>`;
+      tb.appendChild(tr);
+    });
+  }
+  fillBottomTbl('tblBottomJL', jl);
+  fillBottomTbl('tblBottomJS', js);
+}
+
+const bottomMonthTabs = document.getElementById('bottomMonthTabs');
+(P.months || []).forEach(m => {
+  const b = document.createElement('button');
+  b.textContent = m;
+  b.dataset.m = m;
+  b.onclick = () => { currentBottomMonth = m; renderBottom(); };
+  bottomMonthTabs.appendChild(b);
+});
+const bottomCatTabs = document.getElementById('bottomCatTabs');
+(P.main_cats || []).forEach(cat => {
+  const b = document.createElement('button');
+  b.textContent = cat;
+  b.dataset.cat = cat;
+  b.onclick = () => { currentBottomCat = cat; renderBottom(); };
+  bottomCatTabs.appendChild(b);
+});
+renderBottom();
+
 hbarFrom('chartTopJL', P.top_prod['金力'].names, P.top_prod['金力'].amt, JL);
 hbarFrom('chartTopJS', P.top_prod['江升'].names, P.top_prod['江升'].amt, JS);
 
@@ -977,10 +1162,12 @@ supChart('chartSupJS', '江升', JS);
 // Table
 const tbody = document.querySelector('#mainTable tbody');
 const tfoot = document.querySelector('#mainTable tfoot');
-let sum = { jl:0, cab:0, js:0, jlg:0, cabg:0, jsg:0, xfer:0, jlp:0, jsp:0 };
+let sum = { jl:0, cab:0, js:0, jscab:0, jlg:0, cabg:0, jsg:0, jscabg:0, xfer:0, jlp:0, jsp:0 };
 P.combined.forEach(c => {
   sum.jl += c['金力门店零售']; sum.cab += c['金力自取柜零售']; sum.js += c['江升零售'];
+  sum.jscab += (c['江升售卖机零售'] || 0);
   sum.jlg += c['金力门店毛利']; sum.cabg += c['金力自取柜毛利']; sum.jsg += c['江升毛利'];
+  sum.jscabg += (c['江升售卖机毛利'] || 0);
   sum.xfer += c['调拨江升']; sum.jlp += c['金力进货']; sum.jsp += c['江升进货'];
   const tr = document.createElement('tr');
   tr.innerHTML = `
@@ -989,14 +1176,18 @@ P.combined.forEach(c => {
     <td>${yuanFull(c['金力自取柜零售'])}</td>
     <td><b>${yuanFull(c['金力合计零售'])}</b></td>
     <td>${yuanFull(c['江升零售'])}</td>
+    <td>${yuanFull(c['江升售卖机零售'] || 0)}</td>
+    <td><b>${yuanFull(c['江升合计零售'] || c['江升零售'])}</b></td>
     <td><b>${yuanFull(c['含柜总合计'])}</b></td>
     <td>${pct(c['金力含柜占比'])}</td>
     <td>${yuanFull(c['金力门店毛利'])}</td>
     <td>${yuanFull(c['金力自取柜毛利'])}</td>
     <td>${yuanFull(c['江升毛利'])}</td>
+    <td>${yuanFull(c['江升售卖机毛利'] || 0)}</td>
     <td>${pct(c['金力门店毛利率'])}</td>
     <td>${c['金力自取柜零售'] ? pct(c['金力自取柜毛利率']) : '—'}</td>
     <td>${pct(c['江升毛利率'])}</td>
+    <td>${c['江升售卖机零售'] ? pct(c['江升售卖机毛利率']) : '—'}</td>
     <td>${c['调拨江升'] ? yuanFull(c['调拨江升']) : '—'}</td>
     <td>${yuanFull(c['金力进货'])}</td>
     <td>${yuanFull(c['江升进货'])}</td>`;
@@ -1004,21 +1195,25 @@ P.combined.forEach(c => {
 });
 const trs = document.createElement('tr');
 trs.className = 'sum';
-const totalAll = sum.jl + sum.cab + sum.js;
+const totalAll = sum.jl + sum.cab + sum.js + sum.jscab;
 trs.innerHTML = `
   <td>合计</td>
   <td>${yuanFull(sum.jl)}</td>
   <td>${yuanFull(sum.cab)}</td>
   <td>${yuanFull(sum.jl+sum.cab)}</td>
   <td>${yuanFull(sum.js)}</td>
+  <td>${yuanFull(sum.jscab)}</td>
+  <td>${yuanFull(sum.js+sum.jscab)}</td>
   <td>${yuanFull(totalAll)}</td>
   <td>${pct((sum.jl+sum.cab)/totalAll*100)}</td>
   <td>${yuanFull(sum.jlg)}</td>
   <td>${yuanFull(sum.cabg)}</td>
   <td>${yuanFull(sum.jsg)}</td>
+  <td>${yuanFull(sum.jscabg)}</td>
   <td>${pct(sum.jlg/sum.jl*100)}</td>
-  <td>${pct(sum.cabg/sum.cab*100)}</td>
+  <td>${sum.cab ? pct(sum.cabg/sum.cab*100) : '—'}</td>
   <td>${pct(sum.jsg/sum.js*100)}</td>
+  <td>${sum.jscab ? pct(sum.jscabg/sum.jscab*100) : '—'}</td>
   <td>${yuanFull(sum.xfer)}</td>
   <td>${yuanFull(sum.jlp)}</td>
   <td>${yuanFull(sum.jsp)}</td>`;

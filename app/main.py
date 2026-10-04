@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import tempfile
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
@@ -165,14 +166,16 @@ async def admin_upload(
     for f in files:
         if not f.filename:
             continue
-        suffix = Path(f.filename).suffix.lower()
+        original_name = Path(f.filename).name
+        suffix = Path(original_name).suffix.lower()
         if suffix not in {".xlsx", ".xls"}:
-            errors.append(f"{f.filename}: 仅支持 Excel")
+            errors.append(f"{original_name}: 仅支持 Excel")
             continue
         raw = await f.read()
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-            tmp.write(raw)
-            tmp_path = Path(tmp.name)
+        # 用原文件名落盘，便于识别类型/门店；避免 Path.unlink(ignore_errors=...) 兼容问题
+        tmp_dir = Path(tempfile.mkdtemp(prefix="dualstore_up_"))
+        tmp_path = tmp_dir / original_name
+        tmp_path.write_bytes(raw)
         try:
             store_arg = store.strip() or None
             if store_arg == "auto":
@@ -184,20 +187,36 @@ async def admin_upload(
                 uploaded_by=_user(request)["username"],
                 replace=True,
             )
-            # 用原文件名覆盖显示
-            info["filename"] = f.filename
+            info["filename"] = original_name
             results.append(info)
         except Exception as e:  # noqa: BLE001
-            errors.append(f"{f.filename}: {e}")
+            errors.append(f"{original_name}: {e}")
         finally:
-            tmp_path.unlink(ignore_errors=True)
+            try:
+                tmp_path.unlink()
+            except OSError:
+                pass
+            try:
+                tmp_dir.rmdir()
+            except OSError:
+                pass
 
     if errors and not results:
-        return RedirectResponse("/admin?err=" + "; ".join(errors)[:200], status_code=303)
+        return RedirectResponse(
+            "/admin?err=" + quote("; ".join(errors)[:200], safe=""),
+            status_code=303,
+        )
     msg = f"成功导入 {len(results)} 个文件"
     if errors:
         msg += "；部分失败: " + "; ".join(errors)
-    return RedirectResponse("/admin?msg=" + msg[:220], status_code=303)
+    for info in results:
+        if info.get("warnings"):
+            msg += "；" + "；".join(info["warnings"])
+            break
+    return RedirectResponse(
+        "/admin?msg=" + quote(msg[:220], safe=""),
+        status_code=303,
+    )
 
 
 @app.post("/admin/rebuild")

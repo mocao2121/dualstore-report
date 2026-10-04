@@ -10,7 +10,7 @@ from ..db import STORE_IDS
 KIND_PATTERNS = [
     ("retail", re.compile(r"商品零售汇总")),
     ("purchase", re.compile(r"历史进货查询")),
-    ("cabinet", re.compile(r"自取柜|其他出库|出库数量")),
+    ("cabinet", re.compile(r"自取柜|其他出库|出库数量|售卖机")),
 ]
 
 MONTH_PATTERNS = [
@@ -31,7 +31,7 @@ def detect_kind(filename: str, sheet_names: list[str] | None = None) -> str | No
             return "retail"
         if "历史进货查询" in joined:
             return "purchase"
-        if "其他出库" in joined or "出库" in joined:
+        if "其他出库" in joined or "出库" in joined or "自取柜" in joined or "售卖机" in joined:
             return "cabinet"
     return None
 

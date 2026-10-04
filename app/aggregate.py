@@ -8,6 +8,7 @@ from typing import Any
 from .db import connect
 
 CABINET_POINTS = ["智能柜", "金力宿舍", "金力食堂"]
+JS_CABINET_POINTS = ["江升食堂"]
 MAIN_CATS = ["饮料", "香烟", "副食", "槟榔", "冰淇淋", "乳饮", "方便面", "百货"]
 
 
@@ -65,16 +66,18 @@ def _purchase_month_store(conn, ym: str, store: str) -> dict:
     return {"amount": float(row["amount"]), "qty": float(row["qty"])}
 
 
-def _cabinet_month(conn, ym: str, transfers: bool = False) -> dict:
+def _cabinet_month(
+    conn, ym: str, store: str = "金力", transfers: bool = False
+) -> dict:
     flag = 1 if transfers else 0
     row = conn.execute(
         """
         SELECT COALESCE(SUM(retail_amt),0) AS amount,
                COALESCE(SUM(qty),0) AS qty,
                COALESCE(SUM(cost_amt),0) AS cost
-        FROM cabinet_lines WHERE ym=? AND is_transfer=?
+        FROM cabinet_lines WHERE ym=? AND store=? AND is_transfer=?
         """,
-        (ym, flag),
+        (ym, store, flag),
     ).fetchone()
     amount = float(row["amount"])
     cost = float(row["cost"])
@@ -89,17 +92,41 @@ def _cabinet_month(conn, ym: str, transfers: bool = False) -> dict:
     }
 
 
-def _cab_point_month(conn, months: list[str]) -> dict[str, list[float]]:
-    out = {p: [] for p in CABINET_POINTS}
+def _discover_cabinet_points(conn, store: str, fallback: list[str]) -> list[str]:
+    rows = conn.execute(
+        """
+        SELECT DISTINCT point FROM cabinet_lines
+        WHERE store=? AND is_transfer=0
+          AND point IS NOT NULL AND TRIM(point) != ''
+        ORDER BY point
+        """,
+        (store,),
+    ).fetchall()
+    pts = [r["point"] for r in rows]
+    if not pts:
+        return list(fallback)
+    # 金力：按固定顺序优先，其余追加
+    if fallback:
+        ordered = [p for p in fallback if p in pts]
+        ordered.extend(p for p in pts if p not in ordered)
+        return ordered
+    return pts
+
+
+def _cab_point_month(
+    conn, months: list[str], store: str = "金力", points: list[str] | None = None
+) -> dict[str, list[float]]:
+    points = points if points is not None else CABINET_POINTS
+    out = {p: [] for p in points}
     for ym in months:
-        for p in CABINET_POINTS:
+        for p in points:
             row = conn.execute(
                 """
                 SELECT COALESCE(SUM(retail_amt),0) AS amount
                 FROM cabinet_lines
-                WHERE ym=? AND is_transfer=0 AND point=?
+                WHERE ym=? AND store=? AND is_transfer=0 AND point=?
                 """,
-                (ym, p),
+                (ym, store, p),
             ).fetchone()
             out[p].append(_r2(row["amount"]))
     return out
@@ -108,6 +135,17 @@ def _cab_point_month(conn, months: list[str]) -> dict[str, list[float]]:
 def _top_n_from_rows(rows: list[tuple], n: int = 10) -> dict:
     # rows: (name, amount, qty, profit)
     rows = sorted(rows, key=lambda x: x[1], reverse=True)[:n]
+    return {
+        "names": [r[0] for r in rows],
+        "amt": [_r2(r[1]) for r in rows],
+        "qty": [_r2(r[2]) for r in rows],
+        "profit": [_r2(r[3]) for r in rows],
+    }
+
+
+def _bottom_n_from_rows(rows: list[tuple], n: int = 5) -> dict:
+    # rows: (name, amount, qty, profit) — rank by qty ASC
+    rows = sorted(rows, key=lambda x: (x[2], x[1]))[:n]
     return {
         "names": [r[0] for r in rows],
         "amt": [_r2(r[1]) for r in rows],
@@ -136,15 +174,31 @@ def _product_agg(conn, ym: str | None, store: str | None) -> list[tuple]:
     return [(r["name"], float(r["amount"]), float(r["qty"]), float(r["profit"])) for r in rows]
 
 
-def _cabinet_product_agg(conn, ym: str | None) -> list[tuple]:
+def _product_agg_cat(conn, ym: str, store: str, category: str) -> list[tuple]:
+    rows = conn.execute(
+        """
+        SELECT name,
+               SUM(amount) AS amount,
+               SUM(qty) AS qty,
+               SUM(profit) AS profit
+        FROM retail_lines
+        WHERE ym=? AND store=? AND category=?
+        GROUP BY name
+        """,
+        (ym, store, category),
+    ).fetchall()
+    return [(r["name"], float(r["amount"]), float(r["qty"]), float(r["profit"])) for r in rows]
+
+
+def _cabinet_product_agg(conn, ym: str | None, store: str = "金力") -> list[tuple]:
     sql = """
         SELECT name,
                SUM(retail_amt) AS amount,
                SUM(qty) AS qty,
                SUM(retail_amt - cost_amt) AS profit
-        FROM cabinet_lines WHERE is_transfer=0
+        FROM cabinet_lines WHERE is_transfer=0 AND store=?
     """
-    params: list[Any] = []
+    params: list[Any] = [store]
     if ym:
         sql += " AND ym=?"
         params.append(ym)
@@ -270,26 +324,32 @@ def build_report() -> dict:
 
         jl_m = [_retail_month_store(conn, m, "金力") for m in months]
         js_m = [_retail_month_store(conn, m, "江升") for m in months]
-        cab_m = [_cabinet_month(conn, m, transfers=False) for m in months]
-        xfer_m = [_cabinet_month(conn, m, transfers=True) for m in months]
+        cab_m = [_cabinet_month(conn, m, "金力", transfers=False) for m in months]
+        js_cab_m = [_cabinet_month(conn, m, "江升", transfers=False) for m in months]
+        xfer_m = [_cabinet_month(conn, m, "金力", transfers=True) for m in months]
         jl_p = [_purchase_month_store(conn, m, "金力") for m in months]
         js_p = [_purchase_month_store(conn, m, "江升") for m in months]
+        js_cab_points = _discover_cabinet_points(conn, "江升", JS_CABINET_POINTS)
 
         retail_amt = {
             "金力门店": [_r2(x["amount"]) for x in jl_m],
             "金力自取柜": [_r2(x["amount"]) for x in cab_m],
             "金力合计": [_r2(a["amount"] + b["amount"]) for a, b in zip(jl_m, cab_m)],
             "江升": [_r2(x["amount"]) for x in js_m],
+            "江升售卖机": [_r2(x["amount"]) for x in js_cab_m],
+            "江升合计": [_r2(a["amount"] + b["amount"]) for a, b in zip(js_m, js_cab_m)],
         }
         retail_qty = {
             "金力门店": [_r2(x["qty"]) for x in jl_m],
             "金力自取柜": [_r2(x["qty"]) for x in cab_m],
             "江升": [_r2(x["qty"]) for x in js_m],
+            "江升售卖机": [_r2(x["qty"]) for x in js_cab_m],
         }
         gross_profit = {
             "金力门店": [_r2(x["profit"]) for x in jl_m],
             "金力自取柜": [_r2(x["profit"]) for x in cab_m],
             "江升": [_r2(x["profit"]) for x in js_m],
+            "江升售卖机": [_r2(x["profit"]) for x in js_cab_m],
         }
         gross_margin = {
             "金力门店": [_r2(x["margin"]) for x in jl_m],
@@ -297,6 +357,9 @@ def build_report() -> dict:
                 (_r2(x["margin"]) if x["amount"] else None) for x in cab_m
             ],
             "江升": [_r2(x["margin"]) for x in js_m],
+            "江升售卖机": [
+                (_r2(x["margin"]) if x["amount"] else None) for x in js_cab_m
+            ],
         }
         sku = {
             "金力": [_r2(x["sku"]) for x in jl_m],
@@ -326,20 +389,30 @@ def build_report() -> dict:
             "金力门店": mom(retail_amt["金力门店"]),
             "金力合计": mom(retail_amt["金力合计"]),
             "江升": mom(retail_amt["江升"]),
+            "江升合计": mom(retail_amt["江升合计"]),
         }
         combined_series = [
-            _r2(a + b + c)
-            for a, b, c in zip(
-                retail_amt["金力门店"], retail_amt["金力自取柜"], retail_amt["江升"]
+            _r2(a + b + c + d)
+            for a, b, c, d in zip(
+                retail_amt["金力门店"],
+                retail_amt["金力自取柜"],
+                retail_amt["江升"],
+                retail_amt["江升售卖机"],
             )
         ]
         mom_combined = mom(combined_series)
 
         combined = []
         for i, ym in enumerate(months):
-            jl, js, cab, xfer = jl_m[i], js_m[i], cab_m[i], xfer_m[i]
+            jl, js, cab, js_cab, xfer = (
+                jl_m[i],
+                js_m[i],
+                cab_m[i],
+                js_cab_m[i],
+                xfer_m[i],
+            )
             store_sum = jl["amount"] + js["amount"]
-            all_sum = store_sum + cab["amount"]
+            all_sum = store_sum + cab["amount"] + js_cab["amount"]
             combined.append(
                 {
                     "month": labels[i],
@@ -347,24 +420,32 @@ def build_report() -> dict:
                     "金力自取柜零售": _r2(cab["amount"]),
                     "金力合计零售": _r2(jl["amount"] + cab["amount"]),
                     "江升零售": _r2(js["amount"]),
+                    "江升售卖机零售": _r2(js_cab["amount"]),
+                    "江升合计零售": _r2(js["amount"] + js_cab["amount"]),
                     "两店门店合计": _r2(store_sum),
                     "含柜总合计": _r2(all_sum),
                     "金力门店毛利": _r2(jl["profit"]),
                     "金力自取柜毛利": _r2(cab["profit"]),
                     "金力合计毛利": _r2(jl["profit"] + cab["profit"]),
                     "江升毛利": _r2(js["profit"]),
-                    "合计毛利": _r2(jl["profit"] + cab["profit"] + js["profit"]),
+                    "江升售卖机毛利": _r2(js_cab["profit"]),
+                    "合计毛利": _r2(
+                        jl["profit"] + cab["profit"] + js["profit"] + js_cab["profit"]
+                    ),
                     "金力门店数量": _r2(jl["qty"]),
                     "金力自取柜数量": _r2(cab["qty"]),
                     "江升数量": _r2(js["qty"]),
+                    "江升售卖机数量": _r2(js_cab["qty"]),
                     "金力门店成本": _r2(jl["cost"]),
                     "金力自取柜成本": _r2(cab["cost"]),
                     "江升成本": _r2(js["cost"]),
+                    "江升售卖机成本": _r2(js_cab["cost"]),
                     "金力SKU": _r2(jl["sku"]),
                     "江升SKU": _r2(js["sku"]),
                     "金力门店毛利率": _r2(jl["margin"]),
                     "金力自取柜毛利率": _r2(cab["margin"]) if cab["amount"] else 0,
                     "江升毛利率": _r2(js["margin"]),
+                    "江升售卖机毛利率": _r2(js_cab["margin"]) if js_cab["amount"] else 0,
                     "金力门店占比": _r2(jl["amount"] / store_sum * 100) if store_sum else 0,
                     "金力含柜占比": _r2((jl["amount"] + cab["amount"]) / all_sum * 100)
                     if all_sum
@@ -413,6 +494,18 @@ def build_report() -> dict:
             _r2(t_cab["毛利"] / t_cab["零售金额"] * 100) if t_cab["零售金额"] else 0
         )
 
+        t_js_cab = {
+            "零售金额": _r2(sum_field(js_cab_m, "amount")),
+            "零售数量": _r2(sum_field(js_cab_m, "qty")),
+            "毛利": _r2(sum_field(js_cab_m, "profit")),
+            "成本": _r2(sum_field(js_cab_m, "cost")),
+        }
+        t_js_cab["毛利率"] = (
+            _r2(t_js_cab["毛利"] / t_js_cab["零售金额"] * 100)
+            if t_js_cab["零售金额"]
+            else 0
+        )
+
         t_jl_all = {
             "零售金额": _r2(t_jl["零售金额"] + t_cab["零售金额"]),
             "零售数量": _r2(t_jl["零售数量"] + t_cab["零售数量"]),
@@ -421,6 +514,16 @@ def build_report() -> dict:
         }
         t_jl_all["毛利率"] = (
             _r2(t_jl_all["毛利"] / t_jl_all["零售金额"] * 100) if t_jl_all["零售金额"] else 0
+        )
+
+        t_js_all = {
+            "零售金额": _r2(t_js["零售金额"] + t_js_cab["零售金额"]),
+            "零售数量": _r2(t_js["零售数量"] + t_js_cab["零售数量"]),
+            "毛利": _r2(t_js["毛利"] + t_js_cab["毛利"]),
+            "成本": _r2(t_js["成本"] + t_js_cab["成本"]),
+        }
+        t_js_all["毛利率"] = (
+            _r2(t_js_all["毛利"] / t_js_all["零售金额"] * 100) if t_js_all["零售金额"] else 0
         )
 
         t_xfer = {
@@ -432,12 +535,21 @@ def build_report() -> dict:
         grand = {
             "门店零售金额": _r2(t_jl["零售金额"] + t_js["零售金额"]),
             "自取柜零售金额": t_cab["零售金额"],
-            "含柜总零售": _r2(t_jl["零售金额"] + t_js["零售金额"] + t_cab["零售金额"]),
+            "江升售卖机零售金额": t_js_cab["零售金额"],
+            "含柜总零售": _r2(
+                t_jl["零售金额"]
+                + t_js["零售金额"]
+                + t_cab["零售金额"]
+                + t_js_cab["零售金额"]
+            ),
             "门店毛利": _r2(t_jl["毛利"] + t_js["毛利"]),
-            "含柜总毛利": _r2(t_jl["毛利"] + t_js["毛利"] + t_cab["毛利"]),
+            "含柜总毛利": _r2(
+                t_jl["毛利"] + t_js["毛利"] + t_cab["毛利"] + t_js_cab["毛利"]
+            ),
             "进货金额": _r2(t_jl["进货金额"] + t_js["进货金额"]),
             "门店零售数量": _r2(t_jl["零售数量"] + t_js["零售数量"]),
             "自取柜数量": t_cab["零售数量"],
+            "江升售卖机数量": t_js_cab["零售数量"],
             "调拨江升金额": t_xfer["零售金额"],
         }
 
@@ -449,14 +561,31 @@ def build_report() -> dict:
         cat_js = _category_agg(conn, "江升")
 
         monthly_top = {"金力": {}, "江升": {}}
+        monthly_bottom = {"金力": {}, "江升": {}}
         for ym, lab in zip(months, labels):
             monthly_top["金力"][lab] = _top_n_from_rows(_product_agg(conn, ym, "金力"))
             monthly_top["江升"][lab] = _top_n_from_rows(_product_agg(conn, ym, "江升"))
+            monthly_bottom["金力"][lab] = {}
+            monthly_bottom["江升"][lab] = {}
+            for cat in MAIN_CATS:
+                monthly_bottom["金力"][lab][cat] = _bottom_n_from_rows(
+                    _product_agg_cat(conn, ym, "金力", cat)
+                )
+                monthly_bottom["江升"][lab][cat] = _bottom_n_from_rows(
+                    _product_agg_cat(conn, ym, "江升", cat)
+                )
 
         cab_monthly_top = {}
+        js_cab_monthly_top = {}
         for ym, lab in zip(months, labels):
             if cab_m[months.index(ym)]["amount"] > 0:
-                cab_monthly_top[lab] = _top_n_from_rows(_cabinet_product_agg(conn, ym))
+                cab_monthly_top[lab] = _top_n_from_rows(
+                    _cabinet_product_agg(conn, ym, "金力")
+                )
+            if js_cab_m[months.index(ym)]["amount"] > 0:
+                js_cab_monthly_top[lab] = _top_n_from_rows(
+                    _cabinet_product_agg(conn, ym, "江升")
+                )
 
         sell_through = []
         for i, lab in enumerate(labels):
@@ -490,6 +619,8 @@ def build_report() -> dict:
                 "江升": t_js,
                 "金力自取柜": t_cab,
                 "金力含柜": t_jl_all,
+                "江升售卖机": t_js_cab,
+                "江升含柜": t_js_all,
                 "调拨江升": t_xfer,
             },
             "combined": combined,
@@ -500,9 +631,17 @@ def build_report() -> dict:
                 "江升": _top_n_from_rows(_product_agg(conn, None, "江升")),
             },
             "monthly_top": monthly_top,
+            "monthly_bottom": monthly_bottom,
+            "main_cats": list(MAIN_CATS),
             "cab_monthly_top": cab_monthly_top,
-            "cab_top": _top_n_from_rows(_cabinet_product_agg(conn, None)),
-            "cab_point_month": _cab_point_month(conn, months),
+            "cab_top": _top_n_from_rows(_cabinet_product_agg(conn, None, "金力")),
+            "cab_point_month": _cab_point_month(conn, months, "金力", CABINET_POINTS),
+            "js_cab_monthly_top": js_cab_monthly_top,
+            "js_cab_top": _top_n_from_rows(_cabinet_product_agg(conn, None, "江升")),
+            "js_cab_point_month": _cab_point_month(
+                conn, months, "江升", js_cab_points
+            ),
+            "js_cab_points": js_cab_points,
             "cat_margin": {"金力": cat_jl["margin"], "江升": cat_js["margin"]},
             "suppliers": {
                 "金力": _suppliers(conn, "金力"),
@@ -526,14 +665,41 @@ def empty_report() -> dict:
     return {
         "data": {
             "months": [],
-            "retail_amt": {"金力门店": [], "金力自取柜": [], "金力合计": [], "江升": []},
-            "retail_qty": {"金力门店": [], "金力自取柜": [], "江升": []},
-            "gross_profit": {"金力门店": [], "金力自取柜": [], "江升": []},
-            "gross_margin": {"金力门店": [], "金力自取柜": [], "江升": []},
+            "retail_amt": {
+                "金力门店": [],
+                "金力自取柜": [],
+                "金力合计": [],
+                "江升": [],
+                "江升售卖机": [],
+                "江升合计": [],
+            },
+            "retail_qty": {
+                "金力门店": [],
+                "金力自取柜": [],
+                "江升": [],
+                "江升售卖机": [],
+            },
+            "gross_profit": {
+                "金力门店": [],
+                "金力自取柜": [],
+                "江升": [],
+                "江升售卖机": [],
+            },
+            "gross_margin": {
+                "金力门店": [],
+                "金力自取柜": [],
+                "江升": [],
+                "江升售卖机": [],
+            },
             "sku": {"金力": [], "江升": []},
             "avg_price": {"金力": [], "江升": []},
             "purchase_amt": {"金力": [], "江升": []},
-            "mom_retail": {"金力门店": [], "金力合计": [], "江升": []},
+            "mom_retail": {
+                "金力门店": [],
+                "金力合计": [],
+                "江升": [],
+                "江升合计": [],
+            },
             "mom_combined": [],
         },
         "totals": {
@@ -541,6 +707,8 @@ def empty_report() -> dict:
             "江升": {},
             "金力自取柜": {},
             "金力含柜": {},
+            "江升售卖机": {},
+            "江升含柜": {},
             "调拨江升": {},
         },
         "combined": [],
@@ -551,9 +719,15 @@ def empty_report() -> dict:
         "cat_month_stack": {},
         "top_prod": {"金力": empty_top, "江升": empty_top},
         "monthly_top": {"金力": {}, "江升": {}},
+        "monthly_bottom": {"金力": {}, "江升": {}},
+        "main_cats": list(MAIN_CATS),
         "cab_monthly_top": {},
         "cab_top": empty_top,
         "cab_point_month": {p: [] for p in CABINET_POINTS},
+        "js_cab_monthly_top": {},
+        "js_cab_top": empty_top,
+        "js_cab_point_month": {},
+        "js_cab_points": [],
         "cat_margin": {
             "金力": {"names": [], "amt": [], "margin": [], "profit": []},
             "江升": {"names": [], "amt": [], "margin": [], "profit": []},
@@ -569,12 +743,14 @@ def empty_report() -> dict:
         "grand": {
             "门店零售金额": 0,
             "自取柜零售金额": 0,
+            "江升售卖机零售金额": 0,
             "含柜总零售": 0,
             "门店毛利": 0,
             "含柜总毛利": 0,
             "进货金额": 0,
             "门店零售数量": 0,
             "自取柜数量": 0,
+            "江升售卖机数量": 0,
             "调拨江升金额": 0,
         },
         "months": [],
