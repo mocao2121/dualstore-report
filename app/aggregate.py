@@ -781,5 +781,9 @@ def load_cache(rebuild: bool = False) -> dict:
     with connect() as conn:
         row = conn.execute("SELECT payload FROM report_cache WHERE id=1").fetchone()
     if row:
-        return json.loads(row["payload"])
+        report = json.loads(row["payload"])
+        # 旧缓存缺新字段时自动重算（例如刚部署滞销 Bottom5）
+        if "monthly_bottom" not in report or "main_cats" not in report:
+            return save_cache()
+        return report
     return save_cache()
