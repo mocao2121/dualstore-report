@@ -303,16 +303,16 @@ def _suppliers(conn, store: str, n: int = 8) -> dict:
 
 def _common_prod(conn, n: int = 12) -> dict:
     jl = {
-        r["name"]: float(r["amount"])
+        r["name"]: float(r["amount"] or 0)
         for r in conn.execute(
-            "SELECT name, SUM(amount) AS amount FROM retail_lines WHERE store='金力' GROUP BY name"
-        )
+            "SELECT name, COALESCE(SUM(amount),0) AS amount FROM retail_lines WHERE store='金力' GROUP BY name"
+        ).fetchall()
     }
     js = {
-        r["name"]: float(r["amount"])
+        r["name"]: float(r["amount"] or 0)
         for r in conn.execute(
-            "SELECT name, SUM(amount) AS amount FROM retail_lines WHERE store='江升' GROUP BY name"
-        )
+            "SELECT name, COALESCE(SUM(amount),0) AS amount FROM retail_lines WHERE store='江升' GROUP BY name"
+        ).fetchall()
     }
     common = set(jl) & set(js)
     ranked = sorted(common, key=lambda n: jl[n] + js[n], reverse=True)[:n]

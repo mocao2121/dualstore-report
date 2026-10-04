@@ -203,6 +203,9 @@ class _PgCursor:
     def fetchall(self):
         return self._cur.fetchall()
 
+    def __iter__(self):
+        return iter(self.fetchall())
+
     @property
     def rowcount(self):
         return self._cur.rowcount
