@@ -108,7 +108,13 @@ async def report_page(request: Request):
     user = _user(request)
     if not user:
         return RedirectResponse("/login", status_code=303)
-    report = load_cache()
+    try:
+        report = load_cache()
+    except Exception as e:  # noqa: BLE001
+        return HTMLResponse(
+            f"<h3>报告生成失败</h3><pre>{e}</pre><p><a href='/admin'>回后台</a>可先点「强制重算报告缓存」</p>",
+            status_code=500,
+        )
     return TEMPLATES.TemplateResponse(
         request,
         "report.html",
@@ -222,8 +228,17 @@ async def admin_upload(
 @app.post("/admin/rebuild")
 async def admin_rebuild_all(request: Request):
     require_admin(request)
-    save_cache(build_report())
-    return RedirectResponse("/admin?msg=已重算报告缓存", status_code=303)
+    try:
+        save_cache(build_report())
+    except Exception as e:  # noqa: BLE001
+        return RedirectResponse(
+            "/admin?err=" + quote(f"重算失败: {e}"[:200], safe=""),
+            status_code=303,
+        )
+    return RedirectResponse(
+        "/admin?msg=" + quote("已重算报告缓存", safe=""),
+        status_code=303,
+    )
 
 
 @app.post("/admin/months/{ym}/rebuild")

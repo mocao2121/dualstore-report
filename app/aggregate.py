@@ -157,9 +157,9 @@ def _bottom_n_from_rows(rows: list[tuple], n: int = 5) -> dict:
 def _product_agg(conn, ym: str | None, store: str | None) -> list[tuple]:
     sql = """
         SELECT name,
-               SUM(amount) AS amount,
-               SUM(qty) AS qty,
-               SUM(profit) AS profit
+               COALESCE(SUM(amount),0) AS amount,
+               COALESCE(SUM(qty),0) AS qty,
+               COALESCE(SUM(profit),0) AS profit
         FROM retail_lines WHERE 1=1
     """
     params: list[Any] = []
@@ -171,31 +171,37 @@ def _product_agg(conn, ym: str | None, store: str | None) -> list[tuple]:
         params.append(store)
     sql += " GROUP BY name"
     rows = conn.execute(sql, params).fetchall()
-    return [(r["name"], float(r["amount"]), float(r["qty"]), float(r["profit"])) for r in rows]
+    return [
+        (r["name"], float(r["amount"] or 0), float(r["qty"] or 0), float(r["profit"] or 0))
+        for r in rows
+    ]
 
 
 def _product_agg_cat(conn, ym: str, store: str, category: str) -> list[tuple]:
     rows = conn.execute(
         """
         SELECT name,
-               SUM(amount) AS amount,
-               SUM(qty) AS qty,
-               SUM(profit) AS profit
+               COALESCE(SUM(amount),0) AS amount,
+               COALESCE(SUM(qty),0) AS qty,
+               COALESCE(SUM(profit),0) AS profit
         FROM retail_lines
         WHERE ym=? AND store=? AND category=?
         GROUP BY name
         """,
         (ym, store, category),
     ).fetchall()
-    return [(r["name"], float(r["amount"]), float(r["qty"]), float(r["profit"])) for r in rows]
+    return [
+        (r["name"], float(r["amount"] or 0), float(r["qty"] or 0), float(r["profit"] or 0))
+        for r in rows
+    ]
 
 
 def _cabinet_product_agg(conn, ym: str | None, store: str = "金力") -> list[tuple]:
     sql = """
         SELECT name,
-               SUM(retail_amt) AS amount,
-               SUM(qty) AS qty,
-               SUM(retail_amt - cost_amt) AS profit
+               COALESCE(SUM(retail_amt),0) AS amount,
+               COALESCE(SUM(qty),0) AS qty,
+               COALESCE(SUM(retail_amt - cost_amt),0) AS profit
         FROM cabinet_lines WHERE is_transfer=0 AND store=?
     """
     params: list[Any] = [store]
@@ -204,7 +210,10 @@ def _cabinet_product_agg(conn, ym: str | None, store: str = "金力") -> list[tu
         params.append(ym)
     sql += " GROUP BY name"
     rows = conn.execute(sql, params).fetchall()
-    return [(r["name"], float(r["amount"]), float(r["qty"]), float(r["profit"])) for r in rows]
+    return [
+        (r["name"], float(r["amount"] or 0), float(r["qty"] or 0), float(r["profit"] or 0))
+        for r in rows
+    ]
 
 
 def _category_agg(conn, store: str) -> dict:
@@ -778,12 +787,19 @@ def save_cache(report: dict | None = None) -> dict:
 def load_cache(rebuild: bool = False) -> dict:
     if rebuild:
         return save_cache()
+    cached = None
     with connect() as conn:
         row = conn.execute("SELECT payload FROM report_cache WHERE id=1").fetchone()
     if row:
-        report = json.loads(row["payload"])
-        # 旧缓存缺新字段时自动重算（例如刚部署滞销 Bottom5）
-        if "monthly_bottom" not in report or "main_cats" not in report:
-            return save_cache()
-        return report
-    return save_cache()
+        cached = json.loads(row["payload"])
+        if "monthly_bottom" in cached and "main_cats" in cached:
+            return cached
+    # 缺新字段或无缓存时尝试重算；失败则尽量返回旧缓存，避免报告整页 500
+    try:
+        return save_cache()
+    except Exception:
+        if cached is not None:
+            cached.setdefault("monthly_bottom", {"金力": {}, "江升": {}})
+            cached.setdefault("main_cats", list(MAIN_CATS))
+            return cached
+        raise
