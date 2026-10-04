@@ -102,6 +102,9 @@
       <form method="post" action="/admin/seed" onsubmit="return confirm('将扫描 金力/ 与 江升/ 文件夹并导入全部 Excel，确认？')">
         <button class="btn" type="submit">一键导入现有 5–9 月文件夹</button>
       </form>
+      <form method="post" action="/admin/restore-seed" onsubmit="return confirm('将用内置种子覆盖恢复 5–9 月数据（适合线上空库），确认？')">
+        <button class="btn primary" type="submit">恢复种子数据（5–9月）</button>
+      </form>
       <form method="post" action="/admin/rebuild">
         <button class="btn" type="submit">强制重算报告缓存</button>
       </form>

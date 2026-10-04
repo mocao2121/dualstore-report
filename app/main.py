@@ -21,7 +21,7 @@ from .auth import (
     new_session_secret,
     require_admin,
 )
-from .db import UPLOAD_DIR, ensure_dirs, init_db
+from .db import UPLOAD_DIR, ensure_dirs, init_db, load_seed_if_empty
 from .importer import delete_month, ensure_month, guess_month, import_file, list_months
 
 ROOT = Path(__file__).resolve().parent
@@ -264,7 +264,30 @@ async def admin_seed(request: Request):
     ok = sum(1 for r in results if "error" not in r)
     err = sum(1 for r in results if "error" in r)
     return RedirectResponse(
-        f"/admin?msg=种子导入完成：成功 {ok}，失败 {err}",
+        "/admin?msg=" + quote(f"文件夹导入完成：成功 {ok}，失败 {err}"[:220], safe=""),
+        status_code=303,
+    )
+
+
+@app.post("/admin/restore-seed")
+async def admin_restore_seed(request: Request):
+    """用内置 seed_data.json 恢复 5–9 月（覆盖现有业务数据）。"""
+    require_admin(request)
+    try:
+        ok = load_seed_if_empty(force=True)
+        if not ok:
+            return RedirectResponse(
+                "/admin?err=" + quote("未找到 seed_data.json", safe=""),
+                status_code=303,
+            )
+        save_cache(build_report())
+    except Exception as e:  # noqa: BLE001
+        return RedirectResponse(
+            "/admin?err=" + quote(f"恢复失败: {e}"[:200], safe=""),
+            status_code=303,
+        )
+    return RedirectResponse(
+        "/admin?msg=" + quote("已从种子数据恢复 5–9 月并重算报告", safe=""),
         status_code=303,
     )
 

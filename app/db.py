@@ -375,13 +375,25 @@ def _table_count(conn, table: str) -> int:
         return int(row[0])
 
 
-def load_seed_if_empty() -> bool:
-    """业务表为空时导入 seed_data.json（不含 users）。"""
+def load_seed_if_empty(force: bool = False) -> bool:
+    """业务表为空时导入 seed_data.json（不含 users）。
+    force=True 时清空业务表再导入；零售明细为空时也会自动恢复。
+    """
     if not SEED_PATH.exists():
         return False
     with connect() as conn:
-        if _table_count(conn, "months") > 0:
+        retail_n = _table_count(conn, "retail_lines")
+        if not force and retail_n > 0:
             return False
+        for table in (
+            "retail_lines",
+            "purchase_lines",
+            "cabinet_lines",
+            "uploads",
+            "months",
+            "report_cache",
+        ):
+            conn.execute(f"DELETE FROM {table}")
         data = json.loads(SEED_PATH.read_text(encoding="utf-8"))
 
         # 顺序：months → 明细 → uploads → cache
