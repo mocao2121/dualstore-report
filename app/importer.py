@@ -168,11 +168,18 @@ def import_file(
         # 业务按「上传所选月份」整月覆盖，不再按出库日期拆月
         # （汇总周期常是上月下旬到本月下旬，文件内日期会跨月）
         date_yms = sorted({r.get("ym") for r in rows if r.get("ym")})
+        dates = [r.get("date") for r in rows if r.get("date")]
         for r in rows:
             r["ym"] = ym
         ensure_month(ym)
         if replace:
             clear_month_kind(ym, store, kind)
+            # 清掉同文件以前按日期拆到其他月份的残留（旧逻辑 / 旧种子）
+            cleaned = _cleanup_stale_cabinet_splits(ym, store, path.name, dates)
+            if cleaned:
+                warnings.append(
+                    "已清理同文件在其他月份的旧拆月残留: " + ", ".join(cleaned)
+                )
         n = insert_lines(ym, store, kind, rows)
         with connect() as conn:
             conn.execute(
@@ -246,6 +253,50 @@ def _delete_cabinet_dates(ym: str, store: str, dates: list[str]) -> None:
             f"DELETE FROM cabinet_lines WHERE ym=? AND store=? AND date IN ({qmarks})",
             [ym, store, *dates],
         )
+
+
+def _cleanup_stale_cabinet_splits(
+    ym: str, store: str, filename: str, dates: list[str]
+) -> list[str]:
+    """同一柜/机文件若曾被旧逻辑拆到其他月份，清掉那些月份的对应残留。"""
+    cleaned: list[str] = []
+    with connect() as conn:
+        others = conn.execute(
+            """
+            SELECT DISTINCT ym FROM uploads
+            WHERE store=? AND kind='cabinet' AND filename=? AND ym<>?
+            ORDER BY ym
+            """,
+            (store, filename, ym),
+        ).fetchall()
+        other_yms = [row["ym"] for row in others]
+    for other_ym in other_yms:
+        with connect() as conn:
+            file_rows = conn.execute(
+                """
+                SELECT DISTINCT filename FROM uploads
+                WHERE ym=? AND store=? AND kind='cabinet'
+                """,
+                (other_ym, store),
+            ).fetchall()
+            filenames = {row["filename"] for row in file_rows}
+        if filenames == {filename}:
+            # 该月该店柜/机只剩这份旧文件 → 整月清掉
+            clear_month_kind(other_ym, store, "cabinet")
+        else:
+            # 同月还有别的柜/机文件，只按本文件日期尽量清残留
+            _delete_cabinet_dates(other_ym, store, dates)
+            with connect() as conn:
+                conn.execute(
+                    """
+                    DELETE FROM uploads
+                    WHERE ym=? AND store=? AND kind='cabinet' AND filename=?
+                    """,
+                    (other_ym, store, filename),
+                )
+        _refresh_month_status(other_ym)
+        cleaned.append(other_ym)
+    return cleaned
 
 
 def _refresh_month_status(ym: str) -> str:

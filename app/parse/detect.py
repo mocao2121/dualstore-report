@@ -18,6 +18,8 @@ MONTH_PATTERNS = [
     re.compile(r"(20\d{2})\s*[-_/]?\s*(\d{1,2})\s*月"),
     re.compile(r"(20\d{2})(\d{2})\s*月?"),
 ]
+# 仅「9月…」这类无年份文件名；年份默认取当前年
+BARE_MONTH_PATTERN = re.compile(r"(?<!\d)(\d{1,2})\s*月")
 
 
 def detect_kind(filename: str, sheet_names: list[str] | None = None) -> str | None:
@@ -64,6 +66,14 @@ def normalize_month_from_name(filename: str) -> str | None:
             year, month = int(m.group(1)), int(m.group(2))
             if 1 <= month <= 12:
                 return f"{year:04d}-{month:02d}"
+    m = BARE_MONTH_PATTERN.search(name)
+    if m:
+        month = int(m.group(1))
+        if 1 <= month <= 12:
+            from datetime import datetime
+
+            year = datetime.now().year
+            return f"{year:04d}-{month:02d}"
     return None
 
 
