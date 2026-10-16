@@ -33,12 +33,20 @@ def ensure_users() -> None:
     with connect() as conn:
         for username, password, role in _default_users():
             row = conn.execute(
-                "SELECT id FROM users WHERE username = ?", (username,)
+                "SELECT id, password_hash FROM users WHERE username = ?",
+                (username,),
             ).fetchone()
             if row is None:
                 conn.execute(
                     "INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)",
                     (username, hash_password(password), role),
+                )
+                continue
+            # Env passwords win: update hash when ADMIN_PASSWORD / VIEWER_PASSWORD change.
+            if not verify_password(password, row["password_hash"]):
+                conn.execute(
+                    "UPDATE users SET password_hash = ?, role = ? WHERE id = ?",
+                    (hash_password(password), role, row["id"]),
                 )
 
 
