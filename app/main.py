@@ -326,3 +326,8 @@ async def export_html(request: Request):
 @app.get("/api/guess-month")
 async def api_guess_month(filename: str):
     return {"ym": guess_month(filename)}
+
+
+@app.get("/health")
+async def health():
+    return {"ok": True}
