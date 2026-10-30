@@ -345,6 +345,7 @@ async def api_guess_month(filename: str):
     return {"ym": guess_month(filename)}
 
 
-@app.get("/health")
+# UptimeRobot 的 HTTP 监控默认发 HEAD，只注册 GET 会被判成宕机
+@app.api_route("/health", methods=["GET", "HEAD"])
 async def health():
     return {"ok": True}
