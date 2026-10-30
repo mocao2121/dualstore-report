@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>登录记录 · 双店经营报告</title>
+  <style>
+    :root {
+      --bg:#f4f3ef; --surface:#fcfcfb; --surface-2:#f0efec; --ink:#0b0b0b;
+      --ink-2:#52514e; --ink-3:#8a8984; --line:#e4e2db; --jl:#2a78d6;
+      --good:#0f7b3a; --bad:#c62828;
+      --font:"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:var(--font);background:var(--bg);color:var(--ink)}
+    .wrap{max-width:980px;margin:0 auto;padding:24px 18px 60px}
+    header{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px;flex-wrap:wrap}
+    h1{margin:0;font-size:22px}
+    .nav a,.nav button{margin-left:8px}
+    a.btn,button.btn{
+      appearance:none;border:1px solid var(--line);background:var(--surface);
+      color:var(--ink-2);border-radius:999px;padding:7px 14px;font:inherit;font-size:13px;
+      text-decoration:none;cursor:pointer;display:inline-block
+    }
+    .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px}
+    table{width:100%;border-collapse:collapse;font-size:13px}
+    th,td{padding:9px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+    th{font-size:12px;color:var(--ink-3)}
+    .ua{color:var(--ink-2);font-size:12px;word-break:break-all}
+    .ok{color:var(--good);font-weight:600}
+    .no{color:var(--bad);font-weight:600}
+    .hint{font-size:12.5px;color:var(--ink-2);margin-top:10px}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>登录记录</h1>
+      <div style="color:var(--ink-3);font-size:13px;margin-top:4px">{{ user.username }} · 管理员</div>
+    </div>
+    <div class="nav">
+      <a class="btn" href="/admin">回后台</a>
+      <a class="btn" href="/report">查看报告</a>
+      <form method="post" action="/logout" style="display:inline"><button class="btn" type="submit">退出</button></form>
+    </div>
+  </header>
+
+  <div class="card">
+    {% if not logins %}
+      <p class="hint">还没有登录记录。本次部署之后新的登录（含密码输错的尝试）才会被记下。</p>
+    {% else %}
+    <table>
+      <thead>
+        <tr><th>时间</th><th>用户名</th><th>结果</th><th>IP</th><th>浏览器</th></tr>
+      </thead>
+      <tbody>
+      {% for r in logins %}
+        <tr>
+          <td>{{ r.created_at }}</td>
+          <td>{{ r.username or '—' }}</td>
+          <td>{% if r.success %}<span class="ok">成功</span>{% else %}<span class="no">失败</span>{% endif %}</td>
+          <td>{{ r.ip or '—' }}</td>
+          <td class="ua">{{ r.user_agent or '—' }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <p class="hint">最多显示最近 300 条；只记录用户名与来源，不记录密码。</p>
+    {% endif %}
+  </div>
+</div>
+</body>
+</html>

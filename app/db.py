@@ -93,9 +93,19 @@ CREATE TABLE IF NOT EXISTS report_cache (
   updated_at TEXT
 );
 
+CREATE TABLE IF NOT EXISTS login_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  username TEXT,
+  success INTEGER NOT NULL,
+  ip TEXT,
+  user_agent TEXT,
+  created_at TEXT
+);
+
 CREATE INDEX IF NOT EXISTS idx_retail_ym_store ON retail_lines(ym, store);
 CREATE INDEX IF NOT EXISTS idx_purchase_ym_store ON purchase_lines(ym, store);
 CREATE INDEX IF NOT EXISTS idx_cabinet_ym ON cabinet_lines(ym);
+CREATE INDEX IF NOT EXISTS idx_login_created ON login_history(created_at);
 """
 
 SCHEMA_POSTGRES = """
@@ -172,9 +182,19 @@ CREATE TABLE IF NOT EXISTS report_cache (
   updated_at TEXT
 );
 
+CREATE TABLE IF NOT EXISTS login_history (
+  id SERIAL PRIMARY KEY,
+  username TEXT,
+  success INTEGER NOT NULL,
+  ip TEXT,
+  user_agent TEXT,
+  created_at TEXT
+);
+
 CREATE INDEX IF NOT EXISTS idx_retail_ym_store ON retail_lines(ym, store);
 CREATE INDEX IF NOT EXISTS idx_purchase_ym_store ON purchase_lines(ym, store);
 CREATE INDEX IF NOT EXISTS idx_cabinet_ym ON cabinet_lines(ym);
+CREATE INDEX IF NOT EXISTS idx_login_created ON login_history(created_at);
 """
 
 

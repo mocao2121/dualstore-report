@@ -18,7 +18,9 @@ from .auth import (
     ensure_users,
     get_current_user,
     is_production,
+    list_logins,
     new_session_secret,
+    record_login,
     require_admin,
 )
 from .db import UPLOAD_DIR, ensure_dirs, init_db, load_seed_if_empty
@@ -72,6 +74,7 @@ async def login_submit(request: Request):
     username = str(form.get("username") or "").strip()
     password = str(form.get("password") or "")
     user = authenticate(username, password)
+    record_login(request, username, bool(user))
     if not user:
         return TEMPLATES.TemplateResponse(
             request,
@@ -144,6 +147,20 @@ async def admin_page(request: Request):
             "message": request.query_params.get("msg"),
             "error": request.query_params.get("err"),
         },
+    )
+
+
+@app.get("/admin/logins", response_class=HTMLResponse)
+async def admin_logins(request: Request):
+    user = _user(request)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    if user["role"] != "admin":
+        return RedirectResponse("/report", status_code=303)
+    return TEMPLATES.TemplateResponse(
+        request,
+        "logins.html",
+        {"user": user, "logins": list_logins(limit=300)},
     )
 
 
