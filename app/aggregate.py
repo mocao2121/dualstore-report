@@ -323,6 +323,26 @@ def _common_prod(conn, n: int = 12) -> dict:
     }
 
 
+def _decline_rows(prev: dict, cur: dict, base_min: float = 100.0, n: int = 10) -> dict:
+    """上月有售、本月下滑的单品 Top n（按下滑金额）。prev/cur: name -> amount。"""
+    items = []
+    for name, p_amt in prev.items():
+        if p_amt < base_min:
+            continue
+        c_amt = cur.get(name, 0.0)
+        drop = p_amt - c_amt
+        if drop > 0:
+            items.append((name, drop, p_amt, c_amt))
+    items.sort(key=lambda x: x[1], reverse=True)
+    items = items[:n]
+    return {
+        "names": [x[0] for x in items],
+        "drop": [_r2(x[1]) for x in items],
+        "prev": [_r2(x[2]) for x in items],
+        "cur": [_r2(x[3]) for x in items],
+    }
+
+
 def build_report() -> dict:
     with connect() as conn:
         months = _sorted_months(conn)
@@ -336,6 +356,7 @@ def build_report() -> dict:
         cab_m = [_cabinet_month(conn, m, "金力", transfers=False) for m in months]
         js_cab_m = [_cabinet_month(conn, m, "江升", transfers=False) for m in months]
         xfer_m = [_cabinet_month(conn, m, "金力", transfers=True) for m in months]
+        xfer_to_jl_m = [_cabinet_month(conn, m, "江升", transfers=True) for m in months]
         jl_p = [_purchase_month_store(conn, m, "金力") for m in months]
         js_p = [_purchase_month_store(conn, m, "江升") for m in months]
         js_cab_points = _discover_cabinet_points(conn, "江升", JS_CABINET_POINTS)
@@ -413,12 +434,13 @@ def build_report() -> dict:
 
         combined = []
         for i, ym in enumerate(months):
-            jl, js, cab, js_cab, xfer = (
+            jl, js, cab, js_cab, xfer, xfer_jl = (
                 jl_m[i],
                 js_m[i],
                 cab_m[i],
                 js_cab_m[i],
                 xfer_m[i],
+                xfer_to_jl_m[i],
             )
             store_sum = jl["amount"] + js["amount"]
             all_sum = store_sum + cab["amount"] + js_cab["amount"]
@@ -462,6 +484,7 @@ def build_report() -> dict:
                     "金力进货": _r2(jl_p[i]["amount"]),
                     "江升进货": _r2(js_p[i]["amount"]),
                     "调拨江升": _r2(xfer["amount"]),
+                    "调拨金力": _r2(xfer_jl["amount"]),
                 }
             )
 
@@ -540,6 +563,11 @@ def build_report() -> dict:
             "零售数量": _r2(sum_field(xfer_m, "qty")),
             "成本": _r2(sum_field(xfer_m, "cost")),
         }
+        t_xfer_jl = {
+            "零售金额": _r2(sum_field(xfer_to_jl_m, "amount")),
+            "零售数量": _r2(sum_field(xfer_to_jl_m, "qty")),
+            "成本": _r2(sum_field(xfer_to_jl_m, "cost")),
+        }
 
         grand = {
             "门店零售金额": _r2(t_jl["零售金额"] + t_js["零售金额"]),
@@ -560,6 +588,7 @@ def build_report() -> dict:
             "自取柜数量": t_cab["零售数量"],
             "江升售卖机数量": t_js_cab["零售数量"],
             "调拨江升金额": t_xfer["零售金额"],
+            "调拨金力金额": t_xfer_jl["零售金额"],
         }
 
         # peak / low by 含柜总合计
@@ -571,11 +600,14 @@ def build_report() -> dict:
 
         monthly_top = {"金力": {}, "江升": {}}
         monthly_bottom = {"金力": {}, "江升": {}}
+        monthly_cat_top = {"金力": {}, "江升": {}}
         for ym, lab in zip(months, labels):
             monthly_top["金力"][lab] = _top_n_from_rows(_product_agg(conn, ym, "金力"))
             monthly_top["江升"][lab] = _top_n_from_rows(_product_agg(conn, ym, "江升"))
             monthly_bottom["金力"][lab] = {}
             monthly_bottom["江升"][lab] = {}
+            monthly_cat_top["金力"][lab] = {}
+            monthly_cat_top["江升"][lab] = {}
             for cat in MAIN_CATS:
                 monthly_bottom["金力"][lab][cat] = _bottom_n_from_rows(
                     _product_agg_cat(conn, ym, "金力", cat)
@@ -583,6 +615,29 @@ def build_report() -> dict:
                 monthly_bottom["江升"][lab][cat] = _bottom_n_from_rows(
                     _product_agg_cat(conn, ym, "江升", cat)
                 )
+                monthly_cat_top["金力"][lab][cat] = _top_n_from_rows(
+                    _product_agg_cat(conn, ym, "金力", cat), 5
+                )
+                monthly_cat_top["江升"][lab][cat] = _top_n_from_rows(
+                    _product_agg_cat(conn, ym, "江升", cat), 5
+                )
+
+        monthly_decline = {}
+        amt_by_store_ym = {
+            store: {
+                ym: {n: a for n, a, _, _ in _product_agg(conn, ym, store)}
+                for ym in months
+            }
+            for store in ("金力", "江升")
+        }
+        for i in range(1, len(months)):
+            lab = labels[i]
+            prev_ym, cur_ym = months[i - 1], months[i]
+            monthly_decline[lab] = {
+                "prev_label": labels[i - 1],
+                "金力": _decline_rows(amt_by_store_ym["金力"][prev_ym], amt_by_store_ym["金力"][cur_ym]),
+                "江升": _decline_rows(amt_by_store_ym["江升"][prev_ym], amt_by_store_ym["江升"][cur_ym]),
+            }
 
         cab_monthly_top = {}
         js_cab_monthly_top = {}
@@ -631,6 +686,7 @@ def build_report() -> dict:
                 "江升售卖机": t_js_cab,
                 "江升含柜": t_js_all,
                 "调拨江升": t_xfer,
+                "调拨金力": t_xfer_jl,
             },
             "combined": combined,
             "cat_pivot": {"金力": cat_jl["pivot"], "江升": cat_js["pivot"]},
@@ -641,6 +697,8 @@ def build_report() -> dict:
             },
             "monthly_top": monthly_top,
             "monthly_bottom": monthly_bottom,
+            "monthly_cat_top": monthly_cat_top,
+            "monthly_decline": monthly_decline,
             "main_cats": list(MAIN_CATS),
             "cab_monthly_top": cab_monthly_top,
             "cab_top": _top_n_from_rows(_cabinet_product_agg(conn, None, "金力")),
@@ -719,6 +777,7 @@ def empty_report() -> dict:
             "江升售卖机": {},
             "江升含柜": {},
             "调拨江升": {},
+            "调拨金力": {},
         },
         "combined": [],
         "cat_pivot": {
@@ -729,6 +788,8 @@ def empty_report() -> dict:
         "top_prod": {"金力": empty_top, "江升": empty_top},
         "monthly_top": {"金力": {}, "江升": {}},
         "monthly_bottom": {"金力": {}, "江升": {}},
+        "monthly_cat_top": {"金力": {}, "江升": {}},
+        "monthly_decline": {},
         "main_cats": list(MAIN_CATS),
         "cab_monthly_top": {},
         "cab_top": empty_top,
@@ -761,6 +822,7 @@ def empty_report() -> dict:
             "自取柜数量": 0,
             "江升售卖机数量": 0,
             "调拨江升金额": 0,
+            "调拨金力金额": 0,
         },
         "months": [],
         "ym_list": [],
@@ -792,7 +854,7 @@ def load_cache(rebuild: bool = False) -> dict:
         row = conn.execute("SELECT payload FROM report_cache WHERE id=1").fetchone()
     if row:
         cached = json.loads(row["payload"])
-        if "monthly_bottom" in cached and "main_cats" in cached:
+        if "monthly_bottom" in cached and "main_cats" in cached and "monthly_cat_top" in cached and "monthly_decline" in cached:
             return cached
     # 缺新字段或无缓存时尝试重算；失败则尽量返回旧缓存，避免报告整页 500
     try:
@@ -800,6 +862,8 @@ def load_cache(rebuild: bool = False) -> dict:
     except Exception:
         if cached is not None:
             cached.setdefault("monthly_bottom", {"金力": {}, "江升": {}})
+            cached.setdefault("monthly_cat_top", {"金力": {}, "江升": {}})
+            cached.setdefault("monthly_decline", {})
             cached.setdefault("main_cats", list(MAIN_CATS))
             return cached
         raise

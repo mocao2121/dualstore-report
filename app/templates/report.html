@@ -158,6 +158,7 @@
   .top-table { font-size: 12.5px; }
   .top-table td.rank { color: var(--ink-3); width: 28px; text-align: center; font-weight: 700; }
   .top-table td.name { text-align: left; max-width: 220px; }
+  .top-table td.drop { color: #c0392b; font-weight: 650; font-variant-numeric: tabular-nums; }
   .pill {
     display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 999px;
     background: color-mix(in srgb, var(--cab) 18%, transparent); color: var(--cab); font-weight: 650;
@@ -212,6 +213,7 @@
     <a href="#category">品类</a>
     <a href="#products">单品Top10</a>
     <a href="#slow-movers">滞销Bottom5</a>
+    <a href="#decline">下滑Top10</a>
     <a href="#supplier">供应商</a>
     <a href="#table">明细表</a>
     <a href="#insights">结论</a>
@@ -355,7 +357,7 @@
         <div id="cabTopGrid" class="grid-2b" style="margin:0"></div>
       </div>
     </div>
-    <div class="note">口径：柜/机取出库零售金额；归属月份以<strong>后台上传所选月份</strong>为准（文件内出库日期跨月也会整月计入）。金力文件中单头备注「江升」视为<strong>金力→江升调拨</strong>，不计入柜零售，仅在明细表「调拨江升」列展示。江升售卖机为江升自有渠道，与调拨无关。柜/机与门店 POS 为不同通道，报告中并列展示。</div>
+    <div class="note">口径：柜/机取出库零售金额；归属月份以<strong>后台上传所选月份</strong>为准（文件内出库日期跨月也会整月计入）。单头备注写对方门店名视为<strong>店间调拨</strong>（金力文件「江升」= 金力→江升；江升文件「金力」= 江升→金力），不计入本店柜/机零售，分别在「调拨江升 / 调拨金力」列展示。「收款问题」等非柜 sheet 已忽略。柜/机与门店 POS 为不同通道，报告中并列展示。</div>
   </section>
 
   <section class="block" id="profit">
@@ -397,7 +399,7 @@
   <section class="block" id="category">
     <div class="sec-title">
       <h2>六、品类结构（门店）</h2>
-      <p>两店门店零售品类</p>
+      <p>两店门店零售品类 · 含每月各品类 Top5</p>
     </div>
     <div class="card">
       <h2>两店合计 · 月度品类销售构成</h2>
@@ -413,6 +415,13 @@
         <div class="chart-box tall"><canvas id="chartCatJS"></canvas></div>
       </div>
     </div>
+    <div class="card">
+      <h2>每月各品类 Top5 · 金力 vs 江升</h2>
+      <p class="desc">按当月该品类零售额排序 · 主品类口径 · 月份随导入自动增加</p>
+      <div class="month-tabs" id="catTopMonthTabs"></div>
+      <div class="grid-2b" id="catTopGrid" style="margin-bottom:0"></div>
+    </div>
+    <div class="note">口径：仅门店 POS 零售；品类取主品类（饮料/香烟/副食/槟榔/冰淇淋/乳饮/方便面/百货），同品名同月合计。</div>
   </section>
 
   <section class="block" id="products">
@@ -445,8 +454,8 @@
     </div>
 
     <div class="card" style="margin-top:8px">
-      <h2>五个月累计 Top10（总榜）</h2>
-      <p class="desc">不分月的累计对照</p>
+      <h2>{{ period_label }} 累计 Top10（总榜）</h2>
+      <p class="desc">覆盖已导入的全部月份 · 不分月累计对照</p>
       <div class="grid-2b" style="margin-bottom:0">
         <div class="chart-box tall"><canvas id="chartTopJL"></canvas></div>
         <div class="chart-box tall"><canvas id="chartTopJS"></canvas></div>
@@ -490,10 +499,41 @@
     <div class="note">口径：仅门店 POS 零售；同品名同月合计件数升序取 5。品类取主品类（饮料/香烟/副食/槟榔/冰淇淋/乳饮/方便面/百货）。</div>
   </section>
 
+  <section class="block" id="decline">
+    <div class="sec-title">
+      <h2>九、单品下滑 Top10 · 每月</h2>
+      <p>环比上月零售额下滑金额最大 · 两店对照</p>
+    </div>
+    <div class="month-tabs" id="declineMonthTabs"></div>
+    <div class="grid-2b">
+      <div class="card">
+        <h2><span class="dot jl"></span> 金力 · <span id="jlDeclineLabel">—</span> 下滑 Top10</h2>
+        <p class="desc">条长 = 比上月少卖的金额</p>
+        <div class="chart-box xtall"><canvas id="chartDeclineJL"></canvas></div>
+      </div>
+      <div class="card">
+        <h2><span class="dot js"></span> 江升 · <span id="jsDeclineLabel">—</span> 下滑 Top10</h2>
+        <p class="desc">条长 = 比上月少卖的金额</p>
+        <div class="chart-box xtall"><canvas id="chartDeclineJS"></canvas></div>
+      </div>
+    </div>
+    <div class="grid-2b">
+      <div class="card" style="overflow-x:auto">
+        <h2>金力下滑明细</h2>
+        <table class="data top-table" id="tblDeclineJL"><thead><tr><th>#</th><th>商品</th><th>上月</th><th>当月</th><th>下滑</th></tr></thead><tbody></tbody></table>
+      </div>
+      <div class="card" style="overflow-x:auto">
+        <h2>江升下滑明细</h2>
+        <table class="data top-table" id="tblDeclineJS"><thead><tr><th>#</th><th>商品</th><th>上月</th><th>当月</th><th>下滑</th></tr></thead><tbody></tbody></table>
+      </div>
+    </div>
+    <div class="note">口径：仅门店 POS 零售，按品名匹配上月与当月；统计<strong>下滑金额</strong>（上月零售额 − 当月零售额），取下滑最多的 10 个；当月完全无零售的单品也计入（视为归零）。上月零售额低于 100 元的小额单品不参与，避免长尾噪音。首月无上月对照，故从第二个月起可选。</div>
+  </section>
+
   <section class="block" id="supplier">
     <div class="sec-title">
-      <h2>九、供应商进货结构</h2>
-      <p>5 个月累计</p>
+      <h2>十、供应商进货结构</h2>
+      <p>{{ period_label }} 累计</p>
     </div>
     <div class="grid-2b">
       <div class="card">
@@ -509,7 +549,7 @@
 
   <section class="block" id="table">
     <div class="sec-title">
-      <h2>十、月度汇总明细表</h2>
+      <h2>十一、月度汇总明细表</h2>
       <p>含自取柜 / 售卖机与调拨列</p>
     </div>
     <div class="card" style="overflow-x:auto">
@@ -534,6 +574,7 @@
             <th>江升毛利率</th>
             <th>机毛利率</th>
             <th>调拨江升</th>
+            <th>调拨金力</th>
             <th>金力进货</th>
             <th>江升进货</th>
           </tr>
@@ -546,7 +587,7 @@
 
   <section class="block" id="insights">
     <div class="sec-title">
-      <h2>十一、核心结论与建议</h2>
+      <h2>十二、核心结论与建议</h2>
       <p>含自取柜洞察</p>
     </div>
     <div class="insights" id="insightList"></div>
@@ -554,7 +595,7 @@
 
   <footer>
     <div>数据来源：金力/江升「商品零售汇总」「历史进货查询」；金力「自取柜出库」；江升「售卖机出库」（有数据月份）。</div>
-    <div>口径：门店零售取 POS 汇总；柜/机取出库零售金额；金力文件单头备注「江升」记为调拨不计入柜零售。品类/单品 Top 与滞销 Bottom5 基于门店零售。</div>
+    <div>口径：门店零售取 POS 汇总；柜/机取出库零售金额；单头备注对方门店名记为店间调拨（双向）不计入柜/机零售。品类/单品 Top 与滞销 Bottom5 基于门店零售。</div>
     <div style="margin-top:6px">报告自动生成 · {{ generated_at }} · V2</div>
   </footer>
 </div>
@@ -1021,9 +1062,69 @@ function bubbleChart(canvasId, storeKey, color) {
 bubbleChart('chartCatJL', '金力', JL);
 bubbleChart('chartCatJS', '江升', JS);
 
+// ---- 每月各品类 Top5 ----
+let currentCatTopMonth = (P.months && P.months.length) ? P.months[P.months.length - 1] : '';
+const catTopCharts = [];
+const emptyTop = { names: [], amt: [], qty: [], profit: [] };
+
+function renderCatTop() {
+  const m = currentCatTopMonth;
+  document.querySelectorAll('#catTopMonthTabs button').forEach(b => {
+    b.classList.toggle('active', b.dataset.m === m);
+  });
+  catTopCharts.splice(0).forEach(ch => ch.destroy());
+  const grid = document.getElementById('catTopGrid');
+  grid.innerHTML = '';
+  const dataJL = ((P.monthly_cat_top || {})['金力'] || {})[m] || {};
+  const dataJS = ((P.monthly_cat_top || {})['江升'] || {})[m] || {};
+  if (!(P.main_cats || []).length) {
+    grid.innerHTML = '<div class="note">暂无主品类数据</div>';
+    return;
+  }
+  P.main_cats.forEach((cat, i) => {
+    const jl = dataJL[cat] || emptyTop;
+    const js = dataJS[cat] || emptyTop;
+    if (!jl.names.length && !js.names.length) return;
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.style.marginBottom = '0';
+    card.innerHTML = `
+      <h2>${cat} · ${m} Top5</h2>
+      <div class="split-kpi">
+        <div><div class="l"><span class="dot jl"></span> 金力 零售额</div><div class="n">${yuanFull(jl.amt.reduce((s, v) => s + (v || 0), 0))}</div></div>
+        <div><div class="l"><span class="dot js"></span> 江升 零售额</div><div class="n">${yuanFull(js.amt.reduce((s, v) => s + (v || 0), 0))}</div></div>
+      </div>
+      <div class="grid-2b" style="margin:10px 0 0">
+        <div class="chart-box sm" style="height:230px"><canvas id="catTopJL${i}"></canvas></div>
+        <div class="chart-box sm" style="height:230px"><canvas id="catTopJS${i}"></canvas></div>
+      </div>`;
+    grid.appendChild(card);
+    const c1 = hbarFrom(`catTopJL${i}`, jl.names, jl.amt, JL);
+    const c2 = hbarFrom(`catTopJS${i}`, js.names, js.amt, JS);
+    if (c1) catTopCharts.push(c1);
+    if (c2) catTopCharts.push(c2);
+  });
+  if (!grid.children.length) {
+    grid.innerHTML = '<div class="note">该月暂无品类零售明细</div>';
+  }
+}
+
+(function () {
+  const tabs = document.getElementById('catTopMonthTabs');
+  if (!tabs) return;
+  (P.months || []).forEach(m => {
+    const b = document.createElement('button');
+    b.textContent = m;
+    b.dataset.m = m;
+    b.onclick = () => { currentCatTopMonth = m; renderCatTop(); };
+    tabs.appendChild(b);
+  });
+  renderCatTop();
+})();
+
 // ---- Monthly Top10 interactive ----
 let chartMonthJL = null, chartMonthJS = null;
-let currentMonth = '9月';
+let currentMonth = (P.months && P.months.length) ? P.months[P.months.length - 1] : '';
 
 function renderMonthTop(m) {
   currentMonth = m;
@@ -1127,6 +1228,64 @@ const bottomCatTabs = document.getElementById('bottomCatTabs');
 });
 renderBottom();
 
+// ---- 单品下滑 Top10 · 每月 ----
+const DECLINE = P.monthly_decline || {};
+const declineMonths = Object.keys(DECLINE);
+let chartDeclineJL = null, chartDeclineJS = null;
+let currentDeclineMonth = declineMonths.length ? declineMonths[declineMonths.length - 1] : '';
+const DECLINE_COLOR = '#c0392b';
+
+function renderDecline() {
+  const m = currentDeclineMonth;
+  const d = DECLINE[m] || { '金力': { names: [], drop: [], prev: [], cur: [] }, '江升': { names: [], drop: [], prev: [], cur: [] } };
+  const prevLabel = d.prev_label || '—';
+  document.getElementById('jlDeclineLabel').textContent = m + '（比' + prevLabel + '）';
+  document.getElementById('jsDeclineLabel').textContent = m + '（比' + prevLabel + '）';
+
+  document.querySelectorAll('#declineMonthTabs button').forEach(b => {
+    b.classList.toggle('active', b.dataset.m === m);
+  });
+
+  const jl = d['金力'], js = d['江升'];
+  if (chartDeclineJL) chartDeclineJL.destroy();
+  if (chartDeclineJS) chartDeclineJS.destroy();
+  chartDeclineJL = hbarFrom('chartDeclineJL', jl.names, jl.drop, DECLINE_COLOR);
+  chartDeclineJS = hbarFrom('chartDeclineJS', js.names, js.drop, DECLINE_COLOR);
+
+  function fillTbl(id, data) {
+    const tb = document.querySelector('#' + id + ' tbody');
+    tb.innerHTML = '';
+    if (!data.names.length) {
+      tb.innerHTML = '<tr><td colspan="5" style="color:var(--ink-3)">该月无显著下滑单品</td></tr>';
+      return;
+    }
+    data.names.forEach((n, i) => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td class="rank">${i+1}</td><td class="name">${n}</td><td>${yuanFull(data.prev[i])}</td><td>${yuanFull(data.cur[i])}</td><td class="drop">-${Number(data.drop[i]).toLocaleString('zh-CN', {maximumFractionDigits: 0})}</td>`;
+      tb.appendChild(tr);
+    });
+  }
+  fillTbl('tblDeclineJL', jl);
+  fillTbl('tblDeclineJS', js);
+}
+
+(function () {
+  const tabs = document.getElementById('declineMonthTabs');
+  if (!tabs) return;
+  if (!declineMonths.length) {
+    tabs.insertAdjacentHTML('afterend', '<div class="note">至少导入两个月数据后即可对比单品下滑。</div>');
+    return;
+  }
+  declineMonths.forEach(m => {
+    const b = document.createElement('button');
+    b.textContent = m;
+    b.dataset.m = m;
+    b.onclick = () => { currentDeclineMonth = m; renderDecline(); };
+    tabs.appendChild(b);
+  });
+  renderDecline();
+})();
+
 hbarFrom('chartTopJL', P.top_prod['金力'].names, P.top_prod['金力'].amt, JL);
 hbarFrom('chartTopJS', P.top_prod['江升'].names, P.top_prod['江升'].amt, JS);
 
@@ -1162,13 +1321,14 @@ supChart('chartSupJS', '江升', JS);
 // Table
 const tbody = document.querySelector('#mainTable tbody');
 const tfoot = document.querySelector('#mainTable tfoot');
-let sum = { jl:0, cab:0, js:0, jscab:0, jlg:0, cabg:0, jsg:0, jscabg:0, xfer:0, jlp:0, jsp:0 };
+let sum = { jl:0, cab:0, js:0, jscab:0, jlg:0, cabg:0, jsg:0, jscabg:0, xfer:0, xferjl:0, jlp:0, jsp:0 };
 P.combined.forEach(c => {
   sum.jl += c['金力门店零售']; sum.cab += c['金力自取柜零售']; sum.js += c['江升零售'];
   sum.jscab += (c['江升售卖机零售'] || 0);
   sum.jlg += c['金力门店毛利']; sum.cabg += c['金力自取柜毛利']; sum.jsg += c['江升毛利'];
   sum.jscabg += (c['江升售卖机毛利'] || 0);
-  sum.xfer += c['调拨江升']; sum.jlp += c['金力进货']; sum.jsp += c['江升进货'];
+  sum.xfer += c['调拨江升']; sum.xferjl += (c['调拨金力'] || 0);
+  sum.jlp += c['金力进货']; sum.jsp += c['江升进货'];
   const tr = document.createElement('tr');
   tr.innerHTML = `
     <td>${c.month}</td>
@@ -1189,6 +1349,7 @@ P.combined.forEach(c => {
     <td>${pct(c['江升毛利率'])}</td>
     <td>${c['江升售卖机零售'] ? pct(c['江升售卖机毛利率']) : '—'}</td>
     <td>${c['调拨江升'] ? yuanFull(c['调拨江升']) : '—'}</td>
+    <td>${c['调拨金力'] ? yuanFull(c['调拨金力']) : '—'}</td>
     <td>${yuanFull(c['金力进货'])}</td>
     <td>${yuanFull(c['江升进货'])}</td>`;
   tbody.appendChild(tr);
@@ -1215,6 +1376,7 @@ trs.innerHTML = `
   <td>${pct(sum.jsg/sum.js*100)}</td>
   <td>${sum.jscab ? pct(sum.jscabg/sum.jscab*100) : '—'}</td>
   <td>${yuanFull(sum.xfer)}</td>
+  <td>${yuanFull(sum.xferjl)}</td>
   <td>${yuanFull(sum.jlp)}</td>
   <td>${yuanFull(sum.jsp)}</td>`;
 tfoot.appendChild(trs);
@@ -1269,13 +1431,13 @@ const insights = [
   },
   {
     cls: 'warn',
-    title: '注意：存在金力→江升调拨',
-    body: `自取柜导出中标注「江升」的出库合计 <strong>${yuan(g['调拨江升金额'] || 0)}</strong>，已从柜零售剔除。若这些货最终在江升售出，江升进销差需结合调拨成本再核。`
+    title: '注意：存在店间调拨',
+    body: `金力→江升调拨 <strong>${yuan(g['调拨江升金额'] || 0)}</strong>，江升→金力调拨 <strong>${yuan(g['调拨金力金额'] || 0)}</strong>，均已从各自柜/机零售剔除。若调拨货最终在对方门店售出，进销差需结合调拨成本再核。`
   },
   {
     cls: 'alt',
     title: '可执行建议',
-    body: `① 把自取柜高毛利饮料组合复制到门店端架；② 9 月金力门店放量动作沉淀为标准促销；③ 香烟保流水控库存；④ 黄鹤楼/东鹏两店+柜联合议价；⑤ 调拨江升单独建台账，避免虚增柜流水。`
+    body: `① 把自取柜高毛利饮料组合复制到门店端架；② 9 月金力门店放量动作沉淀为标准促销；③ 香烟保流水控库存；④ 黄鹤楼/东鹏两店+柜联合议价；⑤ 店间调拨单独建台账，避免虚增柜/机流水。`
   }
 ];
 const box = document.getElementById('insightList');

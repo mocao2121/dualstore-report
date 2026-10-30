@@ -151,9 +151,10 @@ def import_file(
         rows = parse_purchase(path)
     else:
         rows = parse_cabinet(path)
-        if store == "江升":
-            for r in rows:
-                r["is_transfer"] = 0
+        # 单头备注写对方门店名 = 调拨给对方，不计入本店柜/机零售
+        for r in rows:
+            point = (r.get("point") or "").strip()
+            r["is_transfer"] = 1 if point in ("金力", "江升") and point != store else 0
 
     warnings: list[str] = []
     affected: list[str] = []
@@ -197,10 +198,18 @@ def import_file(
                     datetime.now().isoformat(timespec="seconds"),
                 ),
             )
-        known_points = {"金力食堂", "金力宿舍", "智能柜", "江升", "江升食堂"}
+        known_points = {"金力食堂", "金力宿舍", "智能柜", "江升", "江升食堂", "金力"}
         unknown = {r["point"] for r in rows if r["point"] not in known_points}
         if unknown:
             warnings.append(f"未知柜点: {', '.join(sorted(unknown))}")
+        xfer_amt = sum(
+            float(r.get("retail_amt") or 0) for r in rows if r.get("is_transfer")
+        )
+        if xfer_amt:
+            peer = "江升" if store == "金力" else "金力"
+            warnings.append(
+                f"已识别调拨给{peer} {round(xfer_amt, 2)} 元，不计入本店柜/机零售"
+            )
         if date_yms and (len(date_yms) > 1 or date_yms != [ym]):
             warnings.append(
                 f"文件内出库日期含 {', '.join(date_yms)}，已全部计入所选月份 {ym}"

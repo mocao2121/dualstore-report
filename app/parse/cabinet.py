@@ -9,6 +9,11 @@ from .detect import to_float
 
 CABINET_POINTS = {"金力食堂", "金力宿舍", "智能柜"}
 JS_CABINET_POINTS = {"江升食堂"}
+# 单头备注写门店名 = 调拨给该店（金力→江升 / 江升→金力），不计入柜/机零售
+TRANSFER_POINTS = {"金力", "江升"}
+SALE_POINTS = CABINET_POINTS | JS_CABINET_POINTS
+# 收款补录、盘点差异等非柜出库 sheet，整表跳过
+SKIP_SHEET_PATTERNS = ("收款", "盘点", "报损", "损耗")
 
 
 def _drop_empty_names(df: pd.DataFrame) -> pd.DataFrame:
@@ -21,20 +26,28 @@ def _drop_empty_names(df: pd.DataFrame) -> pd.DataFrame:
     return df.loc[mask].copy()
 
 
+def _should_skip_sheet(sheet: str) -> bool:
+    name = sheet.strip()
+    return any(p in name for p in SKIP_SHEET_PATTERNS)
+
+
 def parse_cabinet(path: str | Path) -> list[dict]:
-    """读取自取柜/售卖机出库：遍历全部 sheet；保留行日期；金力文件 point=江升 记为调拨。
+    """读取自取柜/售卖机出库：遍历全部 sheet；保留行日期。
+    单头备注为柜点 → 柜/机零售；为对方门店名 → 调拨；其余（空/其他）丢弃。
     归入哪个月由上传时选择的月份决定，不在此按日期拆月。
     """
     path = Path(path)
     xl = pd.ExcelFile(path)
     rows: list[dict] = []
     for sheet in xl.sheet_names:
+        if _should_skip_sheet(sheet):
+            continue
         df = pd.read_excel(path, sheet_name=sheet, header=0)
         df = _drop_empty_names(df)
         if df.empty:
             continue
         sheet_point = ""
-        if sheet.strip() in CABINET_POINTS or sheet.strip() in JS_CABINET_POINTS:
+        if sheet.strip() in SALE_POINTS:
             sheet_point = sheet.strip()
         for _, r in df.iterrows():
             name = str(r.get("商品名称") or "").strip()
@@ -48,8 +61,11 @@ def parse_cabinet(path: str | Path) -> list[dict]:
                 if point.lower() == "nan":
                     point = ""
             if not point:
-                point = sheet_point or "其他"
-            is_transfer = 1 if point == "江升" else 0
+                point = sheet_point
+            # 无柜点且非调拨（如误入的空备注行）→ 不进柜/机
+            if not point or (point not in SALE_POINTS and point not in TRANSFER_POINTS):
+                continue
+            is_transfer = 1 if point in TRANSFER_POINTS else 0
             date_val = r.get("日期")
             if pd.isna(date_val) if not isinstance(date_val, str) else not str(date_val).strip():
                 date_s = ""
