@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import secrets
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from functools import wraps
 from typing import Callable
 
@@ -12,6 +12,8 @@ from passlib.context import CryptContext
 from .db import connect, init_db
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+CN_TZ = timezone(timedelta(hours=8), "CST")
 
 
 def _default_users() -> list[tuple[str, str, str]]:
@@ -90,11 +92,25 @@ def record_login(request: Request, username: str, success: bool) -> None:
                     1 if success else 0,
                     client_ip(request)[:128] or None,
                     request.headers.get("user-agent", "")[:256] or None,
-                    datetime.now().isoformat(timespec="seconds"),
+                    datetime.now(CN_TZ).isoformat(timespec="seconds"),
                 ),
             )
     except Exception:  # noqa: BLE001
         pass
+
+
+def _to_cn_time(raw: str | None) -> str:
+    """Render 实例跑 UTC，历史记录是不带时区的 UTC 字符串；展示统一换成北京时间。"""
+    if not raw:
+        return ""
+    text = str(raw).strip()
+    try:
+        dt = datetime.fromisoformat(text)
+    except ValueError:
+        return text
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(CN_TZ).strftime("%Y-%m-%d %H:%M:%S")
 
 
 def list_logins(limit: int = 200) -> list[dict]:
@@ -106,7 +122,12 @@ def list_logins(limit: int = 200) -> list[dict]:
             """,
             (limit,),
         ).fetchall()
-    return [dict(r) for r in rows]
+    result = []
+    for r in rows:
+        item = dict(r)
+        item["created_at"] = _to_cn_time(item.get("created_at"))
+        result.append(item)
+    return result
 
 
 def require_login(request: Request) -> dict:
